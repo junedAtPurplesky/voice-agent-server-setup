@@ -1,0 +1,26 @@
+# STT Service Requirements
+
+# Core FastAPI
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+websockets==12.0
+python-multipart==0.0.6
+
+# STT and audio processing
+faster-whisper==1.0.3
+librosa==0.10.1
+soundfile==0.12.1
+numpy==1.24.3
+
+# Machine Learning
+torch==2.1.0
+
+# Data validation
+pydantic==2.5.0
+
+# Authentication
+pyjwt==2.8.1
+
+# Utilities
+python-dotenv==1.0.0
+
