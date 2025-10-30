@@ -5,8 +5,8 @@
 
 echo "Installing system dependencies..."
 
-sudo apt-get update -qq
-sudo apt-get install -y -qq \
+sudo apt-get update
+sudo apt-get install -y \
     python3.11 \
     python3.11-venv \
     python3-pip \
@@ -23,7 +23,6 @@ sudo apt-get install -y -qq \
     vim \
     netcat \
     jq \
-    bc \
-    > /dev/null 2>&1
+    bc
 
 echo "✓ System dependencies installed"

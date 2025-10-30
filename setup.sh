@@ -65,23 +65,23 @@ if [ ! -f "$BASE_DIR/venv/bin/activate" ]; then
 fi
 
 source "$BASE_DIR/venv/bin/activate"
-pip install --upgrade pip setuptools wheel -q
+pip install --upgrade pip setuptools wheel
 echo -e "${GREEN}✓ Virtual environment ready${NC}\n"
 
 echo -e "${YELLOW}[5/8] Installing Python dependencies with Poetry...${NC}"
 # Install Poetry inside the project venv and configure to use current venv
-pip install -q poetry
+pip install poetry
 poetry config virtualenvs.create false || true
 
 # Ensure CUDA 12.1 wheels for PyTorch
 export PIP_EXTRA_INDEX_URL="https://download.pytorch.org/whl/cu121"
 
-# Install all dependencies defined in pyproject.toml
-poetry install --no-ansi --no-interaction
+# Install all dependencies defined in pyproject.toml (verbose output)
+poetry install --no-ansi --no-interaction -vvv
 
 # Install CosyVoice directly via pip from git (project lacks pyproject/setup.py for Poetry)
 echo -e "${YELLOW}Installing CosyVoice (git) via pip...${NC}"
-pip install --no-cache-dir -q "git+https://github.com/FunAudioLLM/CosyVoice.git@main"
+pip install --no-cache-dir -v "git+https://github.com/FunAudioLLM/CosyVoice.git@main"
 echo ""
 
 echo -e "${YELLOW}[6/8] Applying CUDA optimizations...${NC}"
