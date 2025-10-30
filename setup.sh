@@ -51,8 +51,16 @@ source "$BASE_DIR/venv/bin/activate"
 pip install --upgrade pip setuptools wheel -q
 echo -e "${GREEN}✓ Virtual environment ready${NC}\n"
 
-echo -e "${YELLOW}[5/8] Installing Python dependencies...${NC}"
-bash "$BASE_DIR/scripts/install/install-python-deps.sh"
+echo -e "${YELLOW}[5/8] Installing Python dependencies with Poetry...${NC}"
+# Install Poetry inside the project venv and configure to use current venv
+pip install -q poetry
+poetry config virtualenvs.create false || true
+
+# Ensure CUDA 12.1 wheels for PyTorch
+export PIP_EXTRA_INDEX_URL="https://download.pytorch.org/whl/cu121"
+
+# Install all dependencies defined in pyproject.toml
+poetry install --no-ansi --no-interaction
 echo ""
 
 echo -e "${YELLOW}[6/8] Applying CUDA optimizations...${NC}"

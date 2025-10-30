@@ -1,0 +1,42 @@
+[tool.poetry]
+name = "voice-agent-server-setup"
+version = "0.1.0"
+description = "Production setup and service runner for voice agent server (STT/TTS/LLM)"
+authors = ["PurpleCodebase <dev@purplecodebase.example>"]
+readme = "README.md"
+package-mode = false
+
+[tool.poetry.dependencies]
+python = ">=3.11,<3.12"
+
+# Common
+fastapi = "0.104.1"
+uvicorn = { version = "0.24.0", extras = ["standard"] }
+websockets = "12.0"
+pydantic = "2.5.0"
+python-multipart = "0.0.6"
+python-dotenv = "1.0.0"
+numpy = "1.24.0"
+scipy = "1.11.0"
+
+# PyTorch (CUDA wheels via PIP_EXTRA_INDEX_URL in setup.sh)
+torch = "2.1.0"
+torchaudio = "2.1.0"
+
+# STT
+faster-whisper = "1.0.3"
+
+# TTS (CosyVoice as git dependency)
+CosyVoice = { git = "https://github.com/FunAudioLLM/CosyVoice.git", branch = "main" }
+
+# LLM
+vllm = "0.4.0"
+transformers = "4.36.0"
+
+[tool.poetry.group.dev.dependencies]
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+

@@ -16,21 +16,25 @@
 
 ### `./setup.sh`
 
-- Complete installation: system deps + Python deps + venv + directory structure
+- Complete installation: system deps + Python deps (Poetry) + venv + directory structure
 - **Time:** 15–20 minutes
 - **Runs:**
     - `scripts/install/install-system-deps.sh`
-    - `scripts/install/install-python-deps.sh`
+    - Poetry to resolve and install Python dependencies
 
 ### `scripts/install/install-system-deps.sh`
 
 - Installs system packages (Python 3.11, ffmpeg, git, etc.)
 - **Use when:** Reinstalling system dependencies only
 
-### `scripts/install/install-python-deps.sh`
+### Python Dependencies (Poetry)
 
-- Installs Python packages (PyTorch, vLLM, FastAPI, etc.)
-- **Use when:** Updating Python dependencies only
+- Managed via `pyproject.toml` with pinned versions (PyTorch CUDA via extra index)
+- **Update deps:**
+  ```bash
+  source venv/bin/activate
+  poetry update
+  ```
 
 ---
 
