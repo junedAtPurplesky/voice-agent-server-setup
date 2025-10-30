@@ -289,11 +289,13 @@ curl -X POST "http://localhost:8002/v1/chat/completions" -H "Authorization: Bear
 ./scripts/utils/cleanup-logs.sh
 ./scripts/utils/backup-config.sh
 ./scripts/utils/optimize-cuda.sh
+./scripts/utils/cleanup-setup.sh
 ```
 
 - Cleanup logs
 - Backup config
 - Optimize CUDA performance
+- Cleanup old setup artifacts (venv, CosyVoice clone, .pth, pip cache)
 
 ---
 
