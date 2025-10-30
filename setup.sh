@@ -2,6 +2,7 @@
 ################################################################################
 # Voice Agent Server Setup - Production Installation
 # RunPod RTX 3090: 24GB VRAM, 125GB RAM, 16 vCPU
+# RunPod template: Runpod Pytorch 2.8.0
 ################################################################################
 
 set -e
@@ -73,8 +74,9 @@ echo -e "${YELLOW}[5/8] Installing Python dependencies with Poetry...${NC}"
 pip install poetry
 poetry config virtualenvs.create false || true
 
-# Install all dependencies defined in pyproject.toml (verbose output)
+# Regenerate lock and install dependencies (verbose output)
 # Note: PyTorch is expected to be preinstalled in the RunPod PyTorch 2.8.0 image.
+poetry lock --no-ansi --no-interaction
 poetry install --no-ansi --no-interaction -vvv
 
 # Show detected torch/torchaudio versions to verify environment alignment
