@@ -19,9 +19,7 @@ python-dotenv = "1.0.0"
 numpy = ">=1.24,<2"
 scipy = "1.11.4"
 
-# PyTorch (CUDA wheels via PIP_EXTRA_INDEX_URL in setup.sh)
-torch = "2.1.2"
-torchaudio = "2.1.2"
+# PyTorch is provided by the runtime/template (RunPod PyTorch 2.8.0). Do not pin here.
 
 # STT
 faster-whisper = "1.0.3"
@@ -29,7 +27,8 @@ faster-whisper = "1.0.3"
 # TTS: CosyVoice installed via pip from git in setup.sh (repo lacks pyproject)
 
 # LLM
-vllm = "0.4.0"
+# Align with PyTorch 2.8 runtime; newer vLLM versions support CUDA 12.x and PyTorch >=2.3
+vllm = "0.6.4"
 transformers = ">=4.39.1,<5"
 
 [tool.poetry.group.dev.dependencies]

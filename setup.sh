@@ -73,11 +73,23 @@ echo -e "${YELLOW}[5/8] Installing Python dependencies with Poetry...${NC}"
 pip install poetry
 poetry config virtualenvs.create false || true
 
-# Ensure CUDA 12.1 wheels for PyTorch
-export PIP_EXTRA_INDEX_URL="https://download.pytorch.org/whl/cu121"
-
 # Install all dependencies defined in pyproject.toml (verbose output)
+# Note: PyTorch is expected to be preinstalled in the RunPod PyTorch 2.8.0 image.
 poetry install --no-ansi --no-interaction -vvv
+
+# Show detected torch/torchaudio versions to verify environment alignment
+python - <<'PY'
+try:
+    import torch, torchaudio
+    print(f"Detected torch: {torch.__version__}")
+    print(f"Detected torchaudio: {torchaudio.__version__}")
+    if torch.cuda.is_available():
+        print(f"CUDA available: {torch.version.cuda}")
+    else:
+        print("CUDA not available")
+except Exception as e:
+    print("Torch/torchaudio check failed:", e)
+PY
 
 # Fetch CosyVoice repository and link it into the venv via .pth since it lacks packaging files
 echo -e "${YELLOW}Fetching CosyVoice source and wiring into venv...${NC}"
