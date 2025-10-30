@@ -44,9 +44,26 @@ bash "$BASE_DIR/scripts/install/install-system-deps.sh"
 echo ""
 
 echo -e "${YELLOW}[4/8] Creating Python virtual environment...${NC}"
-if [ ! -d "$BASE_DIR/venv" ]; then
-    python3.11 -m venv "$BASE_DIR/venv"
+# Create or repair venv
+if [ -d "$BASE_DIR/venv" ] && [ ! -f "$BASE_DIR/venv/bin/activate" ]; then
+    echo -e "${YELLOW}Existing venv is malformed (missing bin/activate). Recreating...${NC}"
+    rm -rf "$BASE_DIR/venv"
 fi
+
+if [ ! -d "$BASE_DIR/venv" ]; then
+    if command -v python3.11 >/dev/null 2>&1; then
+        python3.11 -m venv "$BASE_DIR/venv"
+    else
+        python3 -m venv "$BASE_DIR/venv"
+    fi
+fi
+
+if [ ! -f "$BASE_DIR/venv/bin/activate" ]; then
+    echo -e "${RED}❌ Error: Virtual environment creation failed (no bin/activate).${NC}"
+    echo -e "${YELLOW}Hint:${NC} Ensure python venv is available (package: python3.11-venv)."
+    exit 1
+fi
+
 source "$BASE_DIR/venv/bin/activate"
 pip install --upgrade pip setuptools wheel -q
 echo -e "${GREEN}✓ Virtual environment ready${NC}\n"
