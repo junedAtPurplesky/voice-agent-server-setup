@@ -26,8 +26,7 @@ torchaudio = "2.1.0"
 # STT
 faster-whisper = "1.0.3"
 
-# TTS (CosyVoice as git dependency)
-CosyVoice = { git = "https://github.com/FunAudioLLM/CosyVoice.git", branch = "main" }
+# TTS: CosyVoice installed via pip from git in setup.sh (repo lacks pyproject)
 
 # LLM
 vllm = "0.4.0"

@@ -78,6 +78,10 @@ export PIP_EXTRA_INDEX_URL="https://download.pytorch.org/whl/cu121"
 
 # Install all dependencies defined in pyproject.toml
 poetry install --no-ansi --no-interaction
+
+# Install CosyVoice directly via pip from git (project lacks pyproject/setup.py for Poetry)
+echo -e "${YELLOW}Installing CosyVoice (git) via pip...${NC}"
+pip install --no-cache-dir -q "git+https://github.com/FunAudioLLM/CosyVoice.git@main"
 echo ""
 
 echo -e "${YELLOW}[6/8] Applying CUDA optimizations...${NC}"
