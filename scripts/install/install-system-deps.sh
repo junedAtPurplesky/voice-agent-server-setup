@@ -21,7 +21,7 @@ sudo apt-get install -y \
     nvtop \
     tmux \
     vim \
-    netcat \
+    netcat-openbsd \
     jq \
     bc
 
