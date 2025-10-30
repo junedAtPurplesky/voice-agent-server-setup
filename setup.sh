@@ -79,9 +79,31 @@ export PIP_EXTRA_INDEX_URL="https://download.pytorch.org/whl/cu121"
 # Install all dependencies defined in pyproject.toml (verbose output)
 poetry install --no-ansi --no-interaction -vvv
 
-# Install CosyVoice directly via pip from git (project lacks pyproject/setup.py for Poetry)
-echo -e "${YELLOW}Installing CosyVoice (git) via pip...${NC}"
-pip install --no-cache-dir -v "git+https://github.com/FunAudioLLM/CosyVoice.git@main"
+# Fetch CosyVoice repository and link it into the venv via .pth since it lacks packaging files
+echo -e "${YELLOW}Fetching CosyVoice source and wiring into venv...${NC}"
+COSY_DIR="$BASE_DIR/data/models/CosyVoice"
+if [ ! -d "$COSY_DIR/.git" ]; then
+    mkdir -p "$BASE_DIR/data/models"
+    git clone --depth 1 --branch main https://github.com/FunAudioLLM/CosyVoice.git "$COSY_DIR"
+else
+    echo "CosyVoice repo already present, pulling latest..."
+    git -C "$COSY_DIR" pull --ff-only || true
+fi
+
+# Create a .pth file so Python can import cosyvoice from the source tree
+SITE_PACKAGES_PATH=$(python -c 'import sysconfig,sys; print(sysconfig.get_paths()["purelib"])')
+echo "$COSY_DIR" > "$SITE_PACKAGES_PATH/cosyvoice_src.pth"
+
+# Quick import check
+python - <<'PY'
+import sys
+try:
+    import cosyvoice  # noqa: F401
+    print("CosyVoice import: OK")
+except Exception as e:
+    print("CosyVoice import failed:", e)
+    sys.exit(1)
+PY
 echo ""
 
 echo -e "${YELLOW}[6/8] Applying CUDA optimizations...${NC}"
