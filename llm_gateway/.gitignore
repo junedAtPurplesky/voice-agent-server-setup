@@ -1,18 +1,12 @@
 # ===============================
-# Python / Virtual Environment
+# Node.js / TypeScript
 # ===============================
-__pycache__/
-*.py[cod]
-*$py.class
-.venv/
-venv/
-env/
-ENV/
-pip-wheel-metadata/
-*.egg-info/
-*.egg
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
 build/
-dist/
 
 # ===============================
 # Logs and Runtime Data
