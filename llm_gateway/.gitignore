@@ -1,0 +1,178 @@
+# ===============================
+# Python / Virtual Environment
+# ===============================
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+ENV/
+pip-wheel-metadata/
+*.egg-info/
+*.egg
+build/
+dist/
+
+# ===============================
+# Logs and Runtime Data
+# ===============================
+*.log
+logs/
+*.pid
+*.seed
+*.bak
+*.swp
+*.swo
+nohup.out
+.DS_Store
+
+# Service-specific logs
+/home/ubuntu/llm_gateway/gateway.log
+/home/ubuntu/llm_service/llm_service.log
+
+# ===============================
+# Environment / Secrets
+# ===============================
+.env
+*.env.local
+secrets.json
+config.json
+config.yaml
+config.yml
+credentials.json
+token_*
+api_keys_*
+
+# ===============================
+# Systemd and Deployment
+# ===============================
+*.socket
+*.target
+*.timer
+*.pid
+/tmp/
+*.pid.lock
+
+# ===============================
+# OS / Editor Files
+# ===============================
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Linux
+*~
+
+# VS Code / JetBrains / Editors
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# ===============================
+# Docker / Containers
+# ===============================
+Dockerfile.*
+docker-compose*.yml
+*.tar
+*.img
+*.container
+/.docker/
+.dockerignore
+
+# ===============================
+# Testing / Cache
+# ===============================
+.pytest_cache/
+.coverage
+htmlcov/
+.cache/
+.tox/
+.nox/
+.mypy_cache/
+.pyre/
+.pytype/
+.coverage.*
+coverage.xml
+
+# ===============================
+# Node / Frontend (if any)
+# ===============================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+package-lock.json
+yarn.lock
+dist/
+build/
+.cache/
+.next/
+out/
+
+# ===============================
+# Misc / Temporary
+# ===============================
+tmp/
+temp/
+__temp__/
+uploads/
+*.tmp
+*.bak
+*.orig
+
+# ===============================
+# Local Development Artifacts
+# ===============================
+*.db
+*.sqlite3
+*.sqlite
+*.pkl
+*.pt
+*.ckpt
+*.bin
+*.onnx
+models/
+checkpoints/
+runtime_cache/
+
+# ===============================
+# Security-sensitive files
+# ===============================
+ssh_keys/
+id_rsa
+id_rsa.pub
+known_hosts
+authorized_keys
+
+# ===============================
+# Cloud / Infra / Terraform
+# ===============================
+*.tfstate
+*.tfstate.backup
+.terraform/
+*.tfvars
+terraform.tfvars
+cloud-config.yaml
+inventory/
+ansible.log
+
+# ===============================
+# LLM-related artifacts
+# ===============================
+# Model weights, cache, or compiled tensor data
+.vllm_cache/
+vllm_output/
+llm_cache/
+model_weights/
+tokenizer_cache/
+cache_dir/
+quantized_models/

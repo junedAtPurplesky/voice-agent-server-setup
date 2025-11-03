@@ -1,0 +1,18 @@
+[Unit]
+Description=vLLM Gateway Server
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/llm_gateway
+EnvironmentFile=/home/ubuntu/llm_gateway/.env
+ExecStart=/bin/bash /home/ubuntu/llm_gateway/start_gateway.sh
+Restart=on-failure
+RestartSec=5
+LimitNOFILE=65536
+StandardOutput=append:/home/ubuntu/llm_gateway/gateway.log
+StandardError=append:/home/ubuntu/llm_gateway/gateway.err
+
+[Install]
+WantedBy=multi-user.target
