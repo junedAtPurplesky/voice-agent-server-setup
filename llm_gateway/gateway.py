@@ -1,23 +1,24 @@
-# gateway.py
 import os
 import json
 from typing import Optional
-
 import httpx
 from fastapi import FastAPI, Request, Header, HTTPException
 from fastapi.responses import StreamingResponse, JSONResponse
 from dotenv import load_dotenv
 
+# Load environment variables
 load_dotenv()
 
 # --- Configuration ---
-API_KEYS = os.getenv("ALLOWED_API_KEYS", "").split(",")
-VLLM_BASE = os.getenv("VLLM_BASE", "http://127.0.0.1:8000")
-if VLLM_BASE.endswith("/"):
-    VLLM_BASE = VLLM_BASE[:-1]
+API_KEYS = [k.strip() for k in os.getenv("ALLOWED_API_KEYS", "").split(",") if k.strip()]
+VLLM_BASE = os.getenv("VLLM_BASE", "http://127.0.0.1:8000").rstrip("/")
 
 # --- FastAPI setup ---
-app = FastAPI(title="vLLM Gateway", description="Proxies all vLLM endpoints with API key auth")
+app = FastAPI(
+    title="vLLM Gateway",
+    description="Secure proxy for vLLM-compatible endpoints with API key validation",
+    version="1.3.1",
+)
 
 
 # --- Auth ---
@@ -32,47 +33,86 @@ def check_auth(authorization: Optional[str]):
     return token
 
 
-# --- Helper: Stream Proxy ---
+# --- Stream Handler ---
 async def proxy_stream(resp: httpx.Response):
+    """
+    Properly stream SSE responses line by line to the client.
+    """
     async def event_stream():
-        async for chunk in resp.aiter_bytes():
-            if chunk:
-                yield chunk
-    return StreamingResponse(event_stream(), media_type=resp.headers.get("content-type", "text/event-stream"))
+        try:
+            async for line in resp.aiter_lines():
+                # Send each line immediately with newline
+                yield f"{line}\n"
+        except httpx.StreamClosed:
+            pass
+        except Exception as e:
+            print(f"[Stream error] {e}")
+        finally:
+            await resp.aclose()
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",  # Disable nginx buffering
+        }
+    )
 
 
-# --- Universal Proxy Handler ---
+# --- Universal Proxy ---
 async def forward_request(
     request: Request,
     method: str,
     path: str,
-    authorization: Optional[str]
+    authorization: Optional[str],
 ):
+    # Validate API key
     check_auth(authorization)
 
-    body = await request.body()
+    # Construct target URL
     query_string = request.url.query
     url = f"{VLLM_BASE}/{path}"
     if query_string:
         url += f"?{query_string}"
 
-    headers = {k: v for k, v in request.headers.items() if k.lower() != "host"}
+    # Copy headers except host/length
+    headers = {k: v for k, v in request.headers.items() if k.lower() not in ("host", "content-length")}
     headers["Content-Type"] = "application/json"
+    headers["Authorization"] = authorization
 
-    async with httpx.AsyncClient(timeout=None) as client:
-        resp = await client.request(method, url, content=body or None, headers=headers, stream=True)
+    # Read request body
+    body = await request.body()
 
-        if resp.headers.get("content-type", "").startswith("text/event-stream"):
-            return await proxy_stream(resp)
+    async with httpx.AsyncClient(timeout=None, http2=True, follow_redirects=True) as client:
+        async with client.stream(method, url, content=body or None, headers=headers) as resp:
+            content_type = resp.headers.get("content-type", "")
+            status = resp.status_code
 
-        if resp.headers.get("content-type", "").startswith("application/json"):
+            # --- Streamed Response (SSE) ---
+            if content_type.startswith("text/event-stream"):
+                return await proxy_stream(resp)
+
+            # --- Normal Response ---
             data = await resp.aread()
-            return JSONResponse(status_code=resp.status_code, content=json.loads(data))
+            await resp.aclose()
 
-        return StreamingResponse(resp.aiter_bytes(), media_type=resp.headers.get("content-type", "application/octet-stream"))
+            if content_type.startswith("application/json"):
+                try:
+                    parsed = json.loads(data.decode("utf-8"))
+                    return JSONResponse(status_code=status, content=parsed)
+                except json.JSONDecodeError:
+                    return JSONResponse(status_code=status, content={"error": "Invalid JSON response"})
+            else:
+                return StreamingResponse(
+                    iter([data]),
+                    status_code=status,
+                    media_type=content_type or "application/octet-stream",
+                )
 
 
-# --- vLLM-compatible routes (OpenAI-style) ---
+# --- OpenAI-compatible routes ---
 @app.post("/v1/chat/completions")
 async def chat_completions(request: Request, authorization: Optional[str] = Header(None)):
     return await forward_request(request, "POST", "v1/chat/completions", authorization)
@@ -114,7 +154,7 @@ async def rerank(request: Request, authorization: Optional[str] = Header(None)):
     return await forward_request(request, "POST", "v1/rerank", authorization)
 
 
-# --- vLLM internal & utility routes ---
+# --- Internal + Utility Routes ---
 @app.get("/health")
 async def health(request: Request, authorization: Optional[str] = Header(None)):
     return await forward_request(request, "GET", "health", authorization)
@@ -167,18 +207,27 @@ async def metrics(request: Request, authorization: Optional[str] = Header(None))
     return await forward_request(request, "GET", "metrics", authorization)
 
 
-# --- Combined Health Check (Gateway + vLLM) ---
+# --- Health Check (Gateway + vLLM) ---
 @app.get("/healthz")
 async def healthz():
-    """Reports both gateway and vLLM health status."""
+    """Combined gateway + vLLM health check."""
     gateway_status = {"gateway": "ok"}
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
             resp = await client.get(f"{VLLM_BASE}/health")
             if resp.status_code == 200:
-                vllm_status = resp.json()
+                try:
+                    vllm_status = resp.json()
+                except Exception:
+                    vllm_status = {"raw": await resp.aread()}
                 return {"gateway": gateway_status, "vllm": vllm_status, "vllm_status": "ok"}
             else:
                 return {"gateway": gateway_status, "vllm_status": f"unhealthy ({resp.status_code})"}
     except Exception as e:
         return {"gateway": gateway_status, "vllm_status": f"unreachable: {e.__class__.__name__}"}
+
+
+# --- Run (optional) ---
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("gateway:app", host="0.0.0.0", port=int(os.getenv("GATEWAY_PORT", 8080)), reload=False)
