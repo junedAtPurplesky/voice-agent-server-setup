@@ -1,0 +1,25 @@
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+python-multipart==0.0.6
+websockets==12.0
+numpy==1.24.3
+torch==2.1.2
+pydantic==2.5.3
+requests==2.31.0
+
+# CosyVoice2 dependencies
+# Note: CosyVoice2 should be installed from GitHub
+# git clone https://github.com/FunAudioLLM/CosyVoice.git
+# cd CosyVoice && pip install -r requirements.txt
+transformers==4.36.0
+torchaudio==2.1.2
+inflect==7.0.0
+librosa==0.10.1
+soundfile==0.12.1
+
+# Optional: for MP3/Opus encoding
+# pydub==0.25.1
+# opuslib==3.0.1
+
+hf-transfer==0.1.8
+
