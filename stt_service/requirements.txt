@@ -8,4 +8,5 @@ numpy==1.24.3
 torch==2.1.2
 pydantic==2.5.3
 requests==2.31.0
+hf-transfer==0.1.8
 
