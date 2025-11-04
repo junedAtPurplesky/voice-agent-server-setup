@@ -10,6 +10,36 @@ echo "=========================================="
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 cd "$SCRIPT_DIR"
 
+# Install system dependencies required for PyAV
+echo ""
+echo "Checking system dependencies..."
+if command -v apt-get &> /dev/null; then
+    echo "Installing required system packages (pkg-config, FFmpeg libraries)..."
+    apt-get update -qq
+    apt-get install -y -qq pkg-config \
+        libavcodec-dev \
+        libavformat-dev \
+        libavutil-dev \
+        libavdevice-dev \
+        libavfilter-dev \
+        libswscale-dev \
+        libswresample-dev \
+        ffmpeg
+    echo "System dependencies installed successfully."
+elif command -v yum &> /dev/null; then
+    echo "Installing required system packages (pkg-config, FFmpeg libraries)..."
+    yum install -y pkgconfig \
+        ffmpeg-devel \
+        ffmpeg
+    echo "System dependencies installed successfully."
+elif command -v brew &> /dev/null; then
+    echo "Installing required system packages (pkg-config, FFmpeg)..."
+    brew install pkg-config ffmpeg
+    echo "System dependencies installed successfully."
+else
+    echo "Warning: Could not detect package manager. Please ensure pkg-config and FFmpeg libraries are installed."
+fi
+
 # Check Python version
 echo "Checking Python version..."
 PYTHON_CMD=""
