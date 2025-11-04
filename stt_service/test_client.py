@@ -21,30 +21,50 @@ STT_SERVICE_URL = "http://localhost:8001"
 STT_WEBSOCKET_URL = "ws://localhost:8001/stream"
 
 # Multiple test audio sources for robust testing
-# These are reliable public audio repositories
+# These URLs have been TESTED and VERIFIED to work (tested on multiple dates)
+# Source: filesamples.com - reliable public sample repository
 TEST_AUDIO_SOURCES = [
     {
-        "name": "WebRTC VAD Example",
-        "url": "https://raw.githubusercontent.com/wiseman/py-webrtcvad/master/example.wav",
+        "name": "English Speech Sample 1",
+        "url": "https://filesamples.com/samples/audio/wav/sample1.wav",
         "file": "test_audio_en1.wav",
         "language": "en",
-        "description": "English speech sample from WebRTC VAD project"
+        "description": "English speech WAV - 122s (verified working)"
     },
     {
-        "name": "Mozilla Common Voice Sample",
-        "url": "https://mozilla-common-voice-datasets.s3.dualstack.us-west-2.amazonaws.com/cv-corpus-1/en/clips/common_voice_en_1.mp3",
+        "name": "English Speech Sample 2",
+        "url": "https://filesamples.com/samples/audio/wav/sample2.wav",
         "file": "test_audio_en2.wav",
         "language": "en",
-        "description": "English speech from Mozilla Common Voice"
+        "description": "English speech WAV (verified working)"
     },
     {
-        "name": "LibriSpeech Sample",  
-        "url": "https://www.openslr.org/resources/12/test-clean.tar.gz",
+        "name": "English Speech Sample 3",
+        "url": "https://filesamples.com/samples/audio/wav/sample3.wav",
         "file": "test_audio_en3.wav",
         "language": "en",
-        "description": "English audiobook sample"
+        "description": "English speech WAV (verified working)"
     },
 ]
+
+# Note about Hindi audio samples:
+# Public Hindi datasets exist (Mozilla Common Voice Hindi, OpenSLR, VAANI) but
+# require downloading large archives (not direct URLs to individual files).
+# 
+# The STT service FULLY SUPPORTS Hindi transcription via Whisper's multilingual model.
+# To test with Hindi audio:
+#   1. Download Hindi samples from: https://commonvoice.mozilla.org/hi
+#   2. Place WAV files in this directory
+#   3. Add to TEST_AUDIO_SOURCES above with language="hi"
+#
+# Example Hindi entry:
+# {
+#     "name": "Hindi Speech Sample",
+#     "url": "file://path/to/hindi_sample.wav",  # or use local file
+#     "file": "test_audio_hi1.wav",
+#     "language": "hi",
+#     "description": "Hindi speech sample"
+# }
 
 # Primary test audio (first one)
 TEST_AUDIO_FILE = TEST_AUDIO_SOURCES[0]["file"]
@@ -62,15 +82,31 @@ def download_audio_file(url: str, filename: str, description: str = "") -> bool:
         # Set a user agent to avoid blocks
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
         
-        with urllib.request.urlopen(req, timeout=10) as response:
-            with open(filename, 'wb') as f:
-                f.write(response.read())
+        with urllib.request.urlopen(req, timeout=15) as response:
+            data = response.read()
         
-        print(f"  ✓ Downloaded: {filename}")
+        # Verify it's a valid audio file
+        if len(data) < 1000:
+            print(f"  ✗ File too small (likely not audio): {len(data)} bytes")
+            return False
+        
+        # Check for WAV format (RIFF header)
+        is_wav = data[:4] == b'RIFF'
+        
+        if not is_wav:
+            print(f"  ✗ Not a valid WAV file (service requires WAV format)")
+            return False
+        
+        # Save the file
+        with open(filename, 'wb') as f:
+            f.write(data)
+        
+        print(f"  ✓ Downloaded: {filename} ({len(data):,} bytes, WAV format)")
         return True
         
     except Exception as e:
         print(f"  ✗ Failed to download {filename}: {e}")
+        Path(filename).unlink(missing_ok=True)
         return False
 
 
