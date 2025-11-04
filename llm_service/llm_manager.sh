@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==========================================================
-# LLM Service Manager - v1.0
+# LLM Service Manager - v1.1
 # Author: Moin Baig
 # Description: Manage VLLM model lifecycle (install, start, stop, logs, etc.)
 # ==========================================================
@@ -8,18 +8,19 @@
 set -e
 
 # -------------------------------
-# Configuration (Editable Section)
+# Configuration Loading
 # -------------------------------
-MODEL_NAME="Qwen/Qwen2.5-0.5B-Instruct-AWQ"
-HOST="0.0.0.0"
-PORT="8000"
-QUANTIZATION="awq"
-GPU_MEMORY_UTILIZATION="0.6"
-TENSOR_PARALLEL_SIZE="1"
-MAX_NUM_SEQS="1"
-SWAP_SPACE="1"
-ENFORCE_EAGER="--enforce-eager"
-DISABLE_LOG_STATS="--disable-log-stats"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CONFIG_FILE="${SCRIPT_DIR}/llm_config.sh"
+
+# Load configuration
+if [ -f "$CONFIG_FILE" ]; then
+  source "$CONFIG_FILE"
+else
+  echo "❌ Error: Configuration file not found: $CONFIG_FILE"
+  echo "Please create llm_config.sh in the same directory as this script."
+  exit 1
+fi
 
 # Paths
 WORKDIR="$HOME/llm_service"
@@ -54,6 +55,9 @@ setup_env() {
 
 start_llm() {
   echo "🚀 Starting LLM Service..."
+  echo "Model: $MODEL_NAME"
+  echo "Port: $PORT"
+  
   cd "$WORKDIR"
   source "$VENV_DIR/bin/activate"
 
@@ -62,16 +66,44 @@ start_llm() {
     exit 1
   fi
 
-  CMD="vllm serve $MODEL_NAME \
-    --host $HOST \
-    --port $PORT \
-    --quantization $QUANTIZATION \
-    --gpu-memory-utilization $GPU_MEMORY_UTILIZATION \
-    --tensor-parallel-size $TENSOR_PARALLEL_SIZE \
-    --max-num-seqs $MAX_NUM_SEQS \
-    --swap-space $SWAP_SPACE \
-    $ENFORCE_EAGER \
-    $DISABLE_LOG_STATS"
+  # Build command dynamically
+  CMD="vllm serve $MODEL_NAME"
+  
+  # Add configured flags (only if set)
+  [ -n "$HOST" ] && CMD="$CMD --host $HOST"
+  [ -n "$PORT" ] && CMD="$CMD --port $PORT"
+  [ -n "$QUANTIZATION" ] && CMD="$CMD --quantization $QUANTIZATION"
+  [ -n "$GPU_MEMORY_UTILIZATION" ] && CMD="$CMD --gpu-memory-utilization $GPU_MEMORY_UTILIZATION"
+  [ -n "$TENSOR_PARALLEL_SIZE" ] && CMD="$CMD --tensor-parallel-size $TENSOR_PARALLEL_SIZE"
+  [ -n "$MAX_NUM_SEQS" ] && CMD="$CMD --max-num-seqs $MAX_NUM_SEQS"
+  [ -n "$SWAP_SPACE" ] && CMD="$CMD --swap-space $SWAP_SPACE"
+  [ -n "$TOKENIZER" ] && CMD="$CMD --tokenizer $TOKENIZER"
+  [ -n "$TOKENIZER_MODE" ] && CMD="$CMD --tokenizer-mode $TOKENIZER_MODE"
+  [ -n "$DOWNLOAD_DIR" ] && CMD="$CMD --download-dir $DOWNLOAD_DIR"
+  [ -n "$LOAD_FORMAT" ] && CMD="$CMD --load-format $LOAD_FORMAT"
+  [ -n "$DTYPE" ] && CMD="$CMD --dtype $DTYPE"
+  [ -n "$KV_CACHE_DTYPE" ] && CMD="$CMD --kv-cache-dtype $KV_CACHE_DTYPE"
+  [ -n "$MAX_MODEL_LEN" ] && CMD="$CMD --max-model-len $MAX_MODEL_LEN"
+  [ -n "$REVISION" ] && CMD="$CMD --revision $REVISION"
+  [ -n "$CODE_REVISION" ] && CMD="$CMD --code-revision $CODE_REVISION"
+  [ -n "$TOKENIZER_REVISION" ] && CMD="$CMD --tokenizer-revision $TOKENIZER_REVISION"
+  [ -n "$QUANTIZATION_PARAM_PATH" ] && CMD="$CMD --quantization-param-path $QUANTIZATION_PARAM_PATH"
+  [ -n "$BLOCK_SIZE" ] && CMD="$CMD --block-size $BLOCK_SIZE"
+  [ -n "$PIPELINE_PARALLEL_SIZE" ] && CMD="$CMD --pipeline-parallel-size $PIPELINE_PARALLEL_SIZE"
+  [ -n "$DEVICE" ] && CMD="$CMD --device $DEVICE"
+  
+  # Boolean/flag-only options
+  [ -n "$TRUST_REMOTE_CODE" ] && CMD="$CMD $TRUST_REMOTE_CODE"
+  [ -n "$ENFORCE_EAGER" ] && CMD="$CMD $ENFORCE_EAGER"
+  [ -n "$DISABLE_LOG_STATS" ] && CMD="$CMD $DISABLE_LOG_STATS"
+  [ -n "$DISABLE_CUSTOM_ALL_REDUCE" ] && CMD="$CMD $DISABLE_CUSTOM_ALL_REDUCE"
+  [ -n "$ENABLE_PREFIX_CACHING" ] && CMD="$CMD $ENABLE_PREFIX_CACHING"
+  [ -n "$DISABLE_SLIDING_WINDOW" ] && CMD="$CMD $DISABLE_SLIDING_WINDOW"
+  [ -n "$ENABLE_LORA" ] && CMD="$CMD $ENABLE_LORA"
+  [ -n "$ENABLE_CHUNKED_PREFILL" ] && CMD="$CMD $ENABLE_CHUNKED_PREFILL"
+  
+  # Add extra custom flags
+  [ -n "$EXTRA_FLAGS" ] && CMD="$CMD $EXTRA_FLAGS"
 
   echo "Running command: $CMD"
   nohup bash -c "$CMD" > "$LOGFILE" 2>&1 &
