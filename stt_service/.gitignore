@@ -12,6 +12,6 @@ build/
 models/
 *.log
 .stt_service.pid
-test_audio.wav
+test_audio*.wav
 sample.wav
 
