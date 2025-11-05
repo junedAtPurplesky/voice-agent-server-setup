@@ -35,40 +35,29 @@ Everything now follows the **official CosyVoice documentation** exactly:
 
 ---
 
-## 🎯 Quick Setup (3 Steps)
+## 🎯 Quick Setup (2 Steps)
 
-### Step 1: Install Conda
+### Step 1: Run Setup
 
-**Required:** You MUST have Conda (Miniconda or Anaconda) installed.
-
-```bash
-# Check if already installed
-conda --version
-
-# If not installed:
-wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
-bash Miniconda3-latest-Linux-x86_64.sh
-exec bash  # Restart shell
-```
-
-### Step 2: Run Setup
+**Note:** Conda will be installed automatically if not already present!
 
 ```bash
 cd tts_service
 ./setup.sh
 ```
 
-This will automatically:
-- Create conda environment with Python 3.8
-- Install PyTorch with CUDA support (if GPU available)
-- Clone official CosyVoice repository
-- Install all dependencies correctly
-- Configure Python imports
-- Test installation
+The setup script will:
+- ✅ Auto-install Miniconda if not found (supports Linux x86_64/ARM64, macOS Intel/Apple Silicon)
+- ✅ Create conda environment with Python 3.8
+- ✅ Install PyTorch with CUDA support (if GPU available)
+- ✅ Clone official CosyVoice repository
+- ✅ Install all dependencies correctly
+- ✅ Configure Python imports
+- ✅ Test installation
 
-**Duration:** 10-15 minutes
+**Duration:** 10-20 minutes (first time includes Conda installation if needed)
 
-### Step 3: Start Service
+### Step 2: Start Service
 
 ```bash
 ./start_service.sh
@@ -116,7 +105,7 @@ Depending on what you need, read:
 
 ## 🔧 If You Had Previous Setup
 
-### Clean Old Installation
+### Clean Old Installation & Run New Setup
 
 ```bash
 # Remove old virtual environment
@@ -124,23 +113,12 @@ rm -rf venv/
 
 # Remove old models (will re-download)
 rm -rf models/
-```
 
-### Install Conda (if not installed)
-
-```bash
-wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
-bash Miniconda3-latest-Linux-x86_64.sh
-exec bash
-```
-
-### Run New Setup
-
-```bash
+# Run new setup (Conda will be installed automatically if needed)
 ./setup.sh
 ```
 
-This installs everything from scratch following the official guide.
+The setup script will install Conda automatically if it's not present, then set up everything following the official guide.
 
 ---
 
@@ -173,7 +151,10 @@ ps aux | grep tts_server
 
 **Fix:**
 ```bash
-# Install Conda first
+# Re-run setup.sh - it will auto-install Conda
+./setup.sh
+
+# Or manually install if needed
 wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
 bash Miniconda3-latest-Linux-x86_64.sh
 exec bash

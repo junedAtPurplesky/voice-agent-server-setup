@@ -2,19 +2,21 @@
 
 ## 🚀 Installation (First Time)
 
-```bash
-# 1. Install Conda (if not installed)
-wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
-bash Miniconda3-latest-Linux-x86_64.sh
-exec bash
+**✨ NEW:** Conda auto-installs if not present!
 
-# 2. Run setup
+```bash
+# 1. Run setup (handles everything automatically)
 cd tts_service
 ./setup.sh
 
-# 3. Start service
+# 2. Start service
 ./start_service.sh
 ```
+
+**Note:** If Conda is not installed, setup.sh will automatically:
+- Download and install Miniconda
+- Support Linux (x86_64/ARM64) and macOS (Intel/Apple Silicon)
+- Initialize it for your shell
 
 ---
 

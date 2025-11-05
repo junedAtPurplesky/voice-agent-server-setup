@@ -42,21 +42,16 @@ Production-ready Text-to-Speech service using **official CosyVoice** implementat
 
 ## 🚀 Quick Start
 
-### Prerequisites
-
-**⚠️ REQUIRED:** You must have **Conda (Miniconda or Anaconda)** installed!
-
-```bash
-# Install Miniconda (if not already installed)
-wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
-bash Miniconda3-latest-Linux-x86_64.sh
-```
-
 ### One-Line Setup
 
+**✨ NEW:** Conda is now installed automatically if not present!
+
 ```bash
+cd tts_service
 ./setup.sh && ./start_service.sh
 ```
+
+No manual Conda installation needed - the setup script handles everything!
 
 ### Test the Service
 
@@ -89,17 +84,9 @@ See **[INSTALLATION.md](INSTALLATION.md)** for detailed installation guide.
 
 ### Prerequisites
 
-1. **Conda (Required)**
-   ```bash
-   # Check if installed
-   conda --version
-   
-   # If not installed:
-   wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
-   bash Miniconda3-latest-Linux-x86_64.sh
-   ```
+**Note:** Conda is now auto-installed by setup.sh if not present!
 
-2. **System Libraries**
+1. **System Libraries** (optional, setup.sh will try to install these)
    ```bash
    # Ubuntu/Debian
    sudo apt-get update
@@ -122,7 +109,7 @@ cd tts_service
 ```
 
 The setup script will:
-1. ✅ Verify Conda installation
+1. ✅ **Auto-install Conda** if not present (supports Linux/macOS, x86_64/ARM64)
 2. ✅ Install system dependencies
 3. ✅ Create conda environment `cosyvoice` with Python 3.8
 4. ✅ Install PyTorch with CUDA support (if available)
@@ -160,11 +147,7 @@ This service has been **completely refactored** to follow the official CosyVoice
 # 1. Remove old virtual environment
 rm -rf venv/
 
-# 2. Install Conda (if not installed)
-wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
-bash Miniconda3-latest-Linux-x86_64.sh
-
-# 3. Run new setup
+# 2. Run new setup (Conda auto-installs if needed)
 ./setup.sh
 ```
 

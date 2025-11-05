@@ -11,27 +11,90 @@ echo "=========================================="
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 cd "$SCRIPT_DIR"
 
-# Check if conda is installed
+# Check if conda is installed, install if not
 echo ""
 echo "Step 1: Checking Conda installation..."
 if ! command -v conda &> /dev/null; then
-    echo "ERROR: Conda is not installed!"
+    echo "Conda is not installed. Installing Miniconda automatically..."
     echo ""
-    echo "Please install Miniconda or Anaconda:"
-    echo "  For Linux/macOS: https://docs.conda.io/en/latest/miniconda.html"
+    
+    # Detect OS and architecture
+    OS_TYPE=$(uname -s)
+    ARCH_TYPE=$(uname -m)
+    
+    # Determine download URL based on OS and architecture
+    if [ "$OS_TYPE" = "Linux" ]; then
+        if [ "$ARCH_TYPE" = "x86_64" ]; then
+            MINICONDA_URL="https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh"
+        elif [ "$ARCH_TYPE" = "aarch64" ]; then
+            MINICONDA_URL="https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-aarch64.sh"
+        else
+            echo "ERROR: Unsupported Linux architecture: $ARCH_TYPE"
+            exit 1
+        fi
+    elif [ "$OS_TYPE" = "Darwin" ]; then
+        if [ "$ARCH_TYPE" = "x86_64" ]; then
+            MINICONDA_URL="https://repo.anaconda.com/miniconda/Miniconda3-latest-MacOSX-x86_64.sh"
+        elif [ "$ARCH_TYPE" = "arm64" ]; then
+            MINICONDA_URL="https://repo.anaconda.com/miniconda/Miniconda3-latest-MacOSX-arm64.sh"
+        else
+            echo "ERROR: Unsupported macOS architecture: $ARCH_TYPE"
+            exit 1
+        fi
+    else
+        echo "ERROR: Unsupported operating system: $OS_TYPE"
+        echo "Please install Conda manually: https://docs.conda.io/en/latest/miniconda.html"
+        exit 1
+    fi
+    
+    echo "Detected: $OS_TYPE on $ARCH_TYPE"
+    echo "Downloading Miniconda installer..."
+    
+    # Download installer
+    INSTALLER_PATH="/tmp/miniconda_installer.sh"
+    if command -v wget &> /dev/null; then
+        wget -q --show-progress "$MINICONDA_URL" -O "$INSTALLER_PATH"
+    elif command -v curl &> /dev/null; then
+        curl -L "$MINICONDA_URL" -o "$INSTALLER_PATH"
+    else
+        echo "ERROR: Neither wget nor curl is available. Please install one of them."
+        exit 1
+    fi
+    
+    if [ $? -ne 0 ]; then
+        echo "ERROR: Failed to download Miniconda installer"
+        exit 1
+    fi
+    
+    echo "Installing Miniconda..."
+    echo "This will install to: $HOME/miniconda3"
+    
+    # Install Miniconda in batch mode (no prompts)
+    bash "$INSTALLER_PATH" -b -p "$HOME/miniconda3"
+    
+    if [ $? -ne 0 ]; then
+        echo "ERROR: Miniconda installation failed"
+        rm -f "$INSTALLER_PATH"
+        exit 1
+    fi
+    
+    # Clean up installer
+    rm -f "$INSTALLER_PATH"
+    
+    # Initialize conda for the current shell
+    "$HOME/miniconda3/bin/conda" init bash
+    
+    # Source conda for this script
+    export PATH="$HOME/miniconda3/bin:$PATH"
+    
+    echo "✓ Miniconda installed successfully"
     echo ""
-    echo "Quick install (Linux):"
-    echo "  wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh"
-    echo "  bash Miniconda3-latest-Linux-x86_64.sh"
+    echo "NOTE: You may need to restart your shell after this script completes"
+    echo "      for conda to be available in future terminal sessions."
     echo ""
-    echo "Quick install (macOS):"
-    echo "  wget https://repo.anaconda.com/miniconda/Miniconda3-latest-MacOSX-x86_64.sh"
-    echo "  bash Miniconda3-latest-MacOSX-x86_64.sh"
-    echo ""
-    exit 1
+else
+    echo "✓ Conda found: $(conda --version)"
 fi
-
-echo "✓ Conda found: $(conda --version)"
 
 # Install system dependencies
 echo ""
