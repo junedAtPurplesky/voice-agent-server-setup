@@ -3,162 +3,318 @@
 set -e
 
 echo "=========================================="
-echo "CosyVoice2 TTS Service Setup"
+echo "CosyVoice TTS Service Setup (Official)"
+echo "Following: github.com/FunAudioLLM/CosyVoice"
 echo "=========================================="
 
 # Get script directory
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 cd "$SCRIPT_DIR"
 
-# Install system dependencies
+# Check if conda is installed
 echo ""
-echo "Checking system dependencies..."
-if command -v apt-get &> /dev/null; then
-    echo "Installing required system packages (FFmpeg, audio libraries)..."
-    apt-get update -qq
-    apt-get install -y -qq \
-        pkg-config \
-        libavcodec-dev \
-        libavformat-dev \
-        libavutil-dev \
-        libavdevice-dev \
-        libavfilter-dev \
-        libswscale-dev \
-        libswresample-dev \
-        ffmpeg \
-        libsndfile1-dev
-    echo "System dependencies installed successfully."
-elif command -v yum &> /dev/null; then
-    echo "Installing required system packages..."
-    yum install -y \
-        pkgconfig \
-        ffmpeg-devel \
-        ffmpeg \
-        libsndfile-devel
-    echo "System dependencies installed successfully."
-elif command -v brew &> /dev/null; then
-    echo "Installing required system packages (FFmpeg, libsndfile)..."
-    brew install pkg-config ffmpeg libsndfile
-    echo "System dependencies installed successfully."
-else
-    echo "Warning: Could not detect package manager. Please ensure FFmpeg and libsndfile are installed."
-fi
-
-# Check Python version
-echo ""
-echo "Checking Python version..."
-PYTHON_CMD=""
-if command -v python3.10 &> /dev/null; then
-    PYTHON_CMD="python3.10"
-elif command -v python3.11 &> /dev/null; then
-    PYTHON_CMD="python3.11"
-elif command -v python3.9 &> /dev/null; then
-    PYTHON_CMD="python3.9"
-elif command -v python3 &> /dev/null; then
-    PYTHON_VERSION=$(python3 --version | cut -d' ' -f2 | cut -d'.' -f1,2)
-    if [[ "$PYTHON_VERSION" > "3.8" ]]; then
-        PYTHON_CMD="python3"
-    fi
-fi
-
-if [ -z "$PYTHON_CMD" ]; then
-    echo "Error: Python 3.9 or higher is required"
+echo "Step 1: Checking Conda installation..."
+if ! command -v conda &> /dev/null; then
+    echo "ERROR: Conda is not installed!"
+    echo ""
+    echo "Please install Miniconda or Anaconda:"
+    echo "  For Linux/macOS: https://docs.conda.io/en/latest/miniconda.html"
+    echo ""
+    echo "Quick install (Linux):"
+    echo "  wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh"
+    echo "  bash Miniconda3-latest-Linux-x86_64.sh"
+    echo ""
+    echo "Quick install (macOS):"
+    echo "  wget https://repo.anaconda.com/miniconda/Miniconda3-latest-MacOSX-x86_64.sh"
+    echo "  bash Miniconda3-latest-MacOSX-x86_64.sh"
+    echo ""
     exit 1
 fi
 
-echo "Using Python: $($PYTHON_CMD --version)"
+echo "✓ Conda found: $(conda --version)"
 
-# Create virtual environment
+# Install system dependencies
 echo ""
-echo "Creating virtual environment..."
-if [ -d "venv" ]; then
-    echo "Virtual environment already exists. Removing..."
-    rm -rf venv
+echo "Step 2: Installing system dependencies..."
+if command -v apt-get &> /dev/null; then
+    echo "Installing system packages (Ubuntu/Debian)..."
+    sudo apt-get update -qq
+    sudo apt-get install -y -qq \
+        git \
+        git-lfs \
+        ffmpeg \
+        libsndfile1 \
+        sox
+    echo "✓ System dependencies installed"
+elif command -v yum &> /dev/null; then
+    echo "Installing system packages (CentOS/RHEL)..."
+    sudo yum install -y git git-lfs ffmpeg libsndfile sox
+    echo "✓ System dependencies installed"
+elif command -v brew &> /dev/null; then
+    echo "Installing system packages (macOS)..."
+    brew install git git-lfs ffmpeg libsndfile sox
+    echo "✓ System dependencies installed"
+else
+    echo "⚠ Warning: Could not detect package manager"
+    echo "Please ensure these are installed: git, git-lfs, ffmpeg, libsndfile, sox"
 fi
 
-$PYTHON_CMD -m venv venv
-echo "Virtual environment created."
-
-# Activate virtual environment
+# Initialize git-lfs
 echo ""
-echo "Activating virtual environment..."
-source venv/bin/activate
+echo "Step 3: Initializing Git LFS..."
+git lfs install
+echo "✓ Git LFS initialized"
 
-# Upgrade pip
+# Create or update conda environment
 echo ""
-echo "Upgrading pip..."
-pip install --upgrade pip setuptools wheel
+echo "Step 4: Setting up Conda environment..."
+ENV_NAME="cosyvoice"
+
+if conda env list | grep -q "^${ENV_NAME} "; then
+    echo "Conda environment '${ENV_NAME}' already exists."
+    read -p "Do you want to remove and recreate it? (y/n) " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        echo "Removing existing environment..."
+        conda env remove -n ${ENV_NAME} -y
+        echo "Creating new conda environment with Python 3.8..."
+        conda create -n ${ENV_NAME} python=3.8 -y
+    else
+        echo "Using existing environment..."
+    fi
+else
+    echo "Creating conda environment '${ENV_NAME}' with Python 3.8..."
+    conda create -n ${ENV_NAME} python=3.8 -y
+fi
+
+echo "✓ Conda environment ready"
+
+# Get conda base path
+CONDA_BASE=$(conda info --base)
+echo ""
+echo "Activating conda environment..."
+source "${CONDA_BASE}/etc/profile.d/conda.sh"
+conda activate ${ENV_NAME}
+
+echo "✓ Environment activated: $(which python)"
+echo "  Python version: $(python --version)"
 
 # Install PyTorch with CUDA support if available
 echo ""
-echo "Installing PyTorch..."
+echo "Step 5: Installing PyTorch..."
 if command -v nvidia-smi &> /dev/null; then
-    echo "NVIDIA GPU detected. Installing PyTorch with CUDA support..."
-    pip install torch==2.1.2 torchvision==0.16.2 torchaudio==2.1.2 --index-url https://download.pytorch.org/whl/cu121
+    echo "NVIDIA GPU detected. Installing PyTorch with CUDA 11.8..."
+    pip install torch==2.0.1 torchaudio==2.0.2 --index-url https://download.pytorch.org/whl/cu118
 else
     echo "No NVIDIA GPU detected. Installing CPU version..."
-    pip install torch==2.1.2 torchvision==0.16.2 torchaudio==2.1.2 --index-url https://download.pytorch.org/whl/cpu
+    pip install torch==2.0.1 torchaudio==2.0.2 --index-url https://download.pytorch.org/whl/cpu
 fi
 
-# Install other requirements
-echo ""
-echo "Installing dependencies..."
-pip install -r requirements.txt
+echo "✓ PyTorch installed"
+python -c "import torch; print(f'  PyTorch: {torch.__version__}'); print(f'  CUDA available: {torch.cuda.is_available()}')"
 
-# Install CosyVoice2 from GitHub
+# Clone or update CosyVoice repository
 echo ""
-echo "Installing CosyVoice2..."
+echo "Step 6: Setting up CosyVoice repository..."
 if [ -d "CosyVoice" ]; then
     echo "CosyVoice directory exists. Updating..."
     cd CosyVoice
     git pull
+    git submodule update --init --recursive
     cd ..
 else
     echo "Cloning CosyVoice repository..."
-    git clone https://github.com/FunAudioLLM/CosyVoice.git
+    git clone --recursive https://github.com/FunAudioLLM/CosyVoice.git
+    if [ $? -ne 0 ]; then
+        echo "ERROR: Failed to clone CosyVoice repository"
+        exit 1
+    fi
 fi
 
-echo "Installing CosyVoice dependencies..."
-cd CosyVoice
-pip install -r requirements.txt
-cd ..
+echo "✓ CosyVoice repository ready"
 
-# Create models directory
+# Install CosyVoice dependencies (official requirements)
 echo ""
-echo "Creating models directory..."
-mkdir -p models
+echo "Step 7: Installing CosyVoice dependencies..."
+cd CosyVoice
+
+# Install from official requirements.txt
+if [ -f "requirements.txt" ]; then
+    echo "Installing from official requirements.txt..."
+    pip install -r requirements.txt
+else
+    echo "ERROR: requirements.txt not found in CosyVoice directory"
+    exit 1
+fi
+
+cd ..
+echo "✓ CosyVoice dependencies installed"
+
+# Install service-specific dependencies
+echo ""
+echo "Step 8: Installing service dependencies..."
+cat > requirements_service.txt << 'EOF'
+# FastAPI and web server
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+python-multipart==0.0.6
+websockets==12.0
+
+# Pydantic for config
+pydantic==2.5.3
+
+# Additional utilities
+requests==2.31.0
+EOF
+
+pip install -r requirements_service.txt
+rm requirements_service.txt
+
+echo "✓ Service dependencies installed"
+
+# Setup Python path for imports
+echo ""
+echo "Step 9: Configuring Python imports..."
+COSYVOICE_PATH="${SCRIPT_DIR}/CosyVoice"
+THIRD_PARTY_PATH="${COSYVOICE_PATH}/third_party/Matcha-TTS"
+
+# Create sitecustomize.py to add paths automatically
+SITE_PACKAGES=$(python -c "import site; print(site.getsitepackages()[0])")
+cat > "${SITE_PACKAGES}/sitecustomize.py" << EOF
+import sys
+import os
+
+# Add CosyVoice to path
+cosyvoice_path = "${COSYVOICE_PATH}"
+if cosyvoice_path not in sys.path:
+    sys.path.insert(0, cosyvoice_path)
+
+# Add Matcha-TTS to path
+matcha_path = "${THIRD_PARTY_PATH}"
+if matcha_path not in sys.path:
+    sys.path.insert(0, matcha_path)
+EOF
+
+echo "✓ Python paths configured"
+echo "  CosyVoice path: ${COSYVOICE_PATH}"
+echo "  Matcha-TTS path: ${THIRD_PARTY_PATH}"
+
+# Download pretrained models
+echo ""
+echo "Step 10: Setting up model configuration..."
+mkdir -p pretrained_models
+
+cat > .cosyvoice_config << 'EOF'
+# CosyVoice Model Configuration
+# Models will be downloaded automatically from ModelScope on first use
+
+# Available models:
+# - CosyVoice-300M: Base model
+# - CosyVoice-300M-SFT: SFT model (recommended)
+# - CosyVoice-300M-Instruct: Instruct model
+# - CosyVoice2-0.5B: Latest model (smaller, faster)
+
+# Default model for service
+MODEL_DIR="pretrained_models/CosyVoice-300M-SFT"
+EOF
+
+echo "✓ Model configuration created"
+echo ""
+echo "Note: Models will be downloaded automatically from ModelScope on first use."
+echo "You can also manually download models using:"
+echo "  cd CosyVoice"
+echo "  python -c \"from modelscope import snapshot_download; snapshot_download('iic/CosyVoice-300M-SFT', local_dir='../pretrained_models/CosyVoice-300M-SFT')\""
+
+# Create activation helper script
+echo ""
+echo "Step 11: Creating helper scripts..."
+
+cat > activate_env.sh << 'EOF'
+#!/bin/bash
+# Helper script to activate the cosyvoice environment
+CONDA_BASE=$(conda info --base)
+source "${CONDA_BASE}/etc/profile.d/conda.sh"
+conda activate cosyvoice
+echo "✓ Conda environment 'cosyvoice' activated"
+echo "  Python: $(which python)"
+echo "  Python version: $(python --version)"
+EOF
+chmod +x activate_env.sh
+
+echo "✓ Helper scripts created"
 
 # Test installation
 echo ""
-echo "Testing installation..."
-python3 -c "import torch; print(f'PyTorch version: {torch.__version__}'); print(f'CUDA available: {torch.cuda.is_available()}')"
-python3 -c "import fastapi; print('FastAPI: OK')"
-python3 -c "import transformers; print('Transformers: OK')"
-python3 -c "import librosa; print('Librosa: OK')"
-python3 -c "import soundfile; print('Soundfile: OK')"
-
-echo ""
-echo "Testing CosyVoice import..."
-python3 -c "
+echo "Step 12: Testing installation..."
+python << 'PYTEST'
 import sys
-sys.path.insert(0, 'CosyVoice')
+import torch
+import torchaudio
+
+print("=" * 60)
+print("Testing Core Dependencies")
+print("=" * 60)
+print(f"✓ Python: {sys.version}")
+print(f"✓ PyTorch: {torch.__version__}")
+print(f"✓ TorchAudio: {torchaudio.__version__}")
+print(f"✓ CUDA available: {torch.cuda.is_available()}")
+if torch.cuda.is_available():
+    print(f"  - CUDA version: {torch.version.cuda}")
+    print(f"  - GPU count: {torch.cuda.device_count()}")
+    print(f"  - GPU name: {torch.cuda.get_device_name(0)}")
+
+print("\nTesting CosyVoice Import")
+print("=" * 60)
 try:
     from cosyvoice.cli.cosyvoice import CosyVoice
-    print('CosyVoice: OK')
-except Exception as e:
-    print(f'CosyVoice: Warning - {e}')
-    print('Note: Full CosyVoice functionality requires model download on first use')
-"
+    from cosyvoice.utils.file_utils import load_wav
+    print("✓ CosyVoice imports successful")
+except ImportError as e:
+    print(f"✗ CosyVoice import failed: {e}")
+    print("\nTroubleshooting:")
+    print("  1. Make sure you're in the cosyvoice conda environment")
+    print("  2. Check that CosyVoice directory exists")
+    print("  3. Try: source activate_env.sh")
+    sys.exit(1)
+
+print("\nTesting FastAPI")
+print("=" * 60)
+try:
+    import fastapi
+    import uvicorn
+    print(f"✓ FastAPI: {fastapi.__version__}")
+except ImportError as e:
+    print(f"✗ FastAPI import failed: {e}")
+    sys.exit(1)
+
+print("\n" + "=" * 60)
+print("✓ ALL TESTS PASSED")
+print("=" * 60)
+PYTEST
+
+if [ $? -ne 0 ]; then
+    echo ""
+    echo "✗ Installation test failed!"
+    echo "Please check the errors above."
+    exit 1
+fi
 
 echo ""
 echo "=========================================="
-echo "Setup completed successfully!"
+echo "✓ SETUP COMPLETED SUCCESSFULLY!"
 echo "=========================================="
 echo ""
-echo "To start the service, run:"
-echo "  ./start_service.sh"
+echo "Next Steps:"
+echo "  1. Activate environment: source activate_env.sh"
+echo "  2. Start service: ./start_service.sh"
+echo "  3. Test service: python test_client.py"
 echo ""
-echo "The CosyVoice2-0.5B model will be downloaded automatically on first use."
-echo "This may take several minutes depending on your internet connection."
+echo "Models will be downloaded automatically from ModelScope on first use."
+echo "First startup may take several minutes while downloading models."
 echo ""
-
+echo "For manual model download:"
+echo "  source activate_env.sh"
+echo "  cd CosyVoice"
+echo "  # For SFT model (recommended):"
+echo "  python -c \"from modelscope import snapshot_download; snapshot_download('iic/CosyVoice-300M-SFT', local_dir='../pretrained_models/CosyVoice-300M-SFT')\""
+echo ""

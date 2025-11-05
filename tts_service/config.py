@@ -11,14 +11,17 @@ import torch
 
 class ServiceConfig(BaseModel):
     """Server-level configuration"""
-    model_name: str = "CosyVoice2-0.5B"  # CosyVoice2-0.5B model (newer, smaller, faster)
-    model_path: str = "iic/CosyVoice2-0.5B"  # ModelScope model path (official)
+    model_name: str = "CosyVoice-300M-SFT"  # Official CosyVoice model (SFT recommended)
+    model_path: str = "pretrained_models/CosyVoice-300M-SFT"  # Local model path (downloaded via ModelScope)
     device: str = "cuda" if torch.cuda.is_available() else "cpu"
     host: str = "0.0.0.0"
     port: int = 8002
-    model_cache_dir: str = "./models"
-    log_level: str = "debug"  # Set to "debug" for detailed model loading logs, "info" for production
+    log_level: str = "info"  # Set to "debug" for detailed model loading logs
     max_text_length: int = 5000  # Maximum text length in characters
+    
+    # ModelScope configuration (for auto-download)
+    use_modelscope: bool = True  # Auto-download from ModelScope if model not found locally
+    modelscope_model_id: str = "iic/CosyVoice-300M-SFT"  # ModelScope model ID for download
 
 
 class AudioConfig(BaseModel):

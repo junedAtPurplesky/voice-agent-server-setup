@@ -1,14 +1,17 @@
-# CosyVoice2 TTS Service
+# CosyVoice TTS Service
 
-Production-ready Text-to-Speech service using **CosyVoice2-0.5B** model with real-time streaming capabilities and ElevenLabs-style configurations.
+Production-ready Text-to-Speech service using **official CosyVoice** implementation with real-time streaming capabilities and ElevenLabs-style configurations.
+
+> **⚠️ IMPORTANT:** This service now follows the **official CosyVoice installation guide** from [github.com/FunAudioLLM/CosyVoice](https://github.com/FunAudioLLM/CosyVoice)
 
 ## 🌟 Features
 
 ### Core Capabilities
-- ✅ **High-Quality Speech Synthesis** using CosyVoice2-0.5B model
+- ✅ **Official CosyVoice Implementation** - Following FunAudioLLM guidelines
+- ✅ **High-Quality Speech Synthesis** - Multiple languages supported
 - ✅ **Real-time Streaming** with WebSocket support
 - ✅ **HTTP REST API** for simple integrations
-- ✅ **Multiple Voice Support** with configurable speakers
+- ✅ **Multiple Voice Support** - 7+ built-in speakers
 - ✅ **Low Latency** streaming with optimized buffering
 
 ### ElevenLabs-Style Features
@@ -29,14 +32,25 @@ Production-ready Text-to-Speech service using **CosyVoice2-0.5B** model with rea
 
 1. [Quick Start](#-quick-start)
 2. [Installation](#-installation)
-3. [Usage](#-usage)
-4. [API Endpoints](#-api-endpoints)
-5. [Configuration](#-configuration)
-6. [Examples](#-examples)
-7. [Performance](#-performance)
-8. [Troubleshooting](#-troubleshooting)
+3. [What Changed](#-what-changed-important)
+4. [Usage](#-usage)
+5. [API Endpoints](#-api-endpoints)
+6. [Configuration](#-configuration)
+7. [Examples](#-examples)
+8. [Performance](#-performance)
+9. [Troubleshooting](#-troubleshooting)
 
 ## 🚀 Quick Start
+
+### Prerequisites
+
+**⚠️ REQUIRED:** You must have **Conda (Miniconda or Anaconda)** installed!
+
+```bash
+# Install Miniconda (if not already installed)
+wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
+bash Miniconda3-latest-Linux-x86_64.sh
+```
 
 ### One-Line Setup
 
@@ -47,8 +61,11 @@ Production-ready Text-to-Speech service using **CosyVoice2-0.5B** model with rea
 ### Test the Service
 
 ```bash
+# Activate environment first
+source activate_env.sh
+
 # Run comprehensive tests
-./test_client.py
+python test_client.py
 
 # Or test with curl
 curl -X POST http://localhost:8002/synthesize \
@@ -56,51 +73,100 @@ curl -X POST http://localhost:8002/synthesize \
   -d '{"text": "Hello, this is a test of the text-to-speech service!"}'
 ```
 
-See [QUICKSTART.md](QUICKSTART.md) for detailed quick start guide.
+See **[INSTALLATION.md](INSTALLATION.md)** for detailed installation guide.
 
 ## 📦 Installation
 
+### System Requirements
+
+| Component | Required |
+|-----------|----------|
+| **Conda** | ✅ Required (Miniconda/Anaconda) |
+| **Python** | 3.8 (specific version) |
+| **RAM** | 8 GB minimum, 16 GB+ recommended |
+| **Disk** | 5 GB+ (for models) |
+| **GPU** | Optional (4GB+ VRAM for acceleration) |
+
 ### Prerequisites
 
-- **Python 3.9+**
-- **FFmpeg** and audio libraries
-- **CUDA** (optional, for GPU acceleration)
-- **4GB+ RAM** (8GB+ recommended)
+1. **Conda (Required)**
+   ```bash
+   # Check if installed
+   conda --version
+   
+   # If not installed:
+   wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
+   bash Miniconda3-latest-Linux-x86_64.sh
+   ```
 
-### System Dependencies
+2. **System Libraries**
+   ```bash
+   # Ubuntu/Debian
+   sudo apt-get update
+   sudo apt-get install -y git git-lfs ffmpeg libsndfile1 sox
+   
+   # macOS
+   brew install git git-lfs ffmpeg libsndfile sox
+   
+   # Initialize Git LFS
+   git lfs install
+   ```
 
-#### Ubuntu/Debian
+### Automated Setup
+
 ```bash
-sudo apt-get update
-sudo apt-get install -y pkg-config ffmpeg libsndfile1-dev
-```
-
-#### macOS
-```bash
-brew install pkg-config ffmpeg libsndfile
-```
-
-### Setup
-
-```bash
-# Clone and navigate to service directory
 cd tts_service
 
-# Run setup script (installs Python dependencies and CosyVoice2)
+# Run official setup script
 ./setup.sh
-
-# Start the service
-./start_service.sh
 ```
 
 The setup script will:
-1. Create a Python virtual environment
-2. Install PyTorch (with CUDA support if available)
-3. Install all dependencies
-4. Clone and setup CosyVoice2 from GitHub
-5. Create necessary directories
+1. ✅ Verify Conda installation
+2. ✅ Install system dependencies
+3. ✅ Create conda environment `cosyvoice` with Python 3.8
+4. ✅ Install PyTorch with CUDA support (if available)
+5. ✅ Clone official CosyVoice repository with submodules
+6. ✅ Install official dependencies from CosyVoice/requirements.txt
+7. ✅ Configure Python import paths
+8. ✅ Install service dependencies (FastAPI, etc.)
+9. ✅ Test installation
 
-**First Run**: The CosyVoice2-0.5B model (~500MB) will download automatically on first use.
+**First Run**: Model (~1GB) downloads automatically on first use.
+
+### Manual Installation
+
+For manual installation or troubleshooting, see **[INSTALLATION.md](INSTALLATION.md)**.
+
+## 🔄 What Changed? (IMPORTANT)
+
+This service has been **completely refactored** to follow the official CosyVoice installation:
+
+| Aspect | Old | New (Official) |
+|--------|-----|----------------|
+| Environment | Python venv | ✅ Conda |
+| Python Version | 3.9+ | ✅ 3.8 (official requirement) |
+| CosyVoice Source | Separate install | ✅ Official clone with submodules |
+| Dependencies | Custom list | ✅ Official requirements.txt |
+| Model | CosyVoice2-0.5B | ✅ CosyVoice-300M-SFT |
+| API Calls | Custom | ✅ Official inference_sft API |
+| Speakers | Hardcoded | ✅ Dynamic from model |
+
+**See [SETUP_SUMMARY.md](SETUP_SUMMARY.md) for detailed migration guide.**
+
+### If You Have Old Setup
+
+```bash
+# 1. Remove old virtual environment
+rm -rf venv/
+
+# 2. Install Conda (if not installed)
+wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
+bash Miniconda3-latest-Linux-x86_64.sh
+
+# 3. Run new setup
+./setup.sh
+```
 
 ## 🎯 Usage
 

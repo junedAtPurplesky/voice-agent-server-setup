@@ -57,147 +57,133 @@ class SynthesisEngine:
         self._load_model()
     
     def _load_model(self):
-        """Load the CosyVoice2-0.5B model with detailed debug logging"""
+        """Load the CosyVoice model following official guidelines"""
         import os
         import sys
         import traceback
         
         try:
             logger.info("=" * 70)
-            logger.info("STARTING MODEL LOADING PROCESS")
+            logger.info("STARTING MODEL LOADING PROCESS (Official CosyVoice)")
             logger.info("=" * 70)
             
             # Log system information
-            logger.debug(f"Python version: {sys.version}")
-            logger.debug(f"PyTorch version: {torch.__version__}")
-            logger.debug(f"CUDA available: {torch.cuda.is_available()}")
+            logger.info(f"Python version: {sys.version}")
+            logger.info(f"PyTorch version: {torch.__version__}")
+            logger.info(f"CUDA available: {torch.cuda.is_available()}")
             if torch.cuda.is_available():
-                logger.debug(f"CUDA version: {torch.version.cuda}")
-                logger.debug(f"GPU count: {torch.cuda.device_count()}")
-                logger.debug(f"Current GPU: {torch.cuda.current_device()}")
-                logger.debug(f"GPU name: {torch.cuda.get_device_name(0)}")
+                logger.info(f"CUDA version: {torch.version.cuda}")
+                logger.info(f"GPU: {torch.cuda.get_device_name(0)}")
             
             # Log configuration
             logger.info(f"Model name: {self.service_config.model_name}")
-            logger.info(f"Model path/ID: {self.service_config.model_path}")
+            logger.info(f"Model path: {self.service_config.model_path}")
             logger.info(f"Target device: {self.service_config.device}")
-            logger.info(f"Model cache dir: {self.service_config.model_cache_dir}")
             
-            # Check cache directory
-            cache_dir = os.path.expanduser("~/.cache/modelscope/hub")
-            logger.debug(f"ModelScope cache directory: {cache_dir}")
-            logger.debug(f"Cache directory exists: {os.path.exists(cache_dir)}")
+            # Import CosyVoice
+            logger.info("-" * 70)
+            logger.info("IMPORTING COSYVOICE")
+            logger.info("-" * 70)
             
-            model_cache_path = os.path.join(cache_dir, self.service_config.model_path)
-            logger.debug(f"Expected model cache path: {model_cache_path}")
-            logger.debug(f"Model cached locally: {os.path.exists(model_cache_path)}")
-            
-            # Import CosyVoice model
-            logger.info("Attempting to import CosyVoice library...")
             try:
                 from cosyvoice.cli.cosyvoice import CosyVoice
                 from cosyvoice.utils.file_utils import load_wav
                 logger.info("✓ CosyVoice library imported successfully")
                 
-                # Check CosyVoice version if available
-                try:
-                    import cosyvoice
-                    if hasattr(cosyvoice, '__version__'):
-                        logger.debug(f"CosyVoice version: {cosyvoice.__version__}")
-                except:
-                    logger.debug("CosyVoice version not available")
-                
             except ImportError as e:
                 logger.error(f"✗ Failed to import CosyVoice: {e}")
-                logger.error(f"Import error traceback:\n{traceback.format_exc()}")
-                logger.warning("CosyVoice not installed. Install it with:")
-                logger.warning("  git clone https://github.com/FunAudioLLM/CosyVoice.git")
-                logger.warning("  cd CosyVoice && pip install -r requirements.txt")
+                logger.error("=" * 70)
+                logger.error("COSYVOICE NOT PROPERLY INSTALLED")
+                logger.error("=" * 70)
+                logger.error("Please run setup.sh to install CosyVoice properly:")
+                logger.error("  ./setup.sh")
+                logger.error("")
+                logger.error("Or manually install:")
+                logger.error("  1. Create conda env: conda create -n cosyvoice python=3.8")
+                logger.error("  2. Activate: conda activate cosyvoice")
+                logger.error("  3. Clone: git clone --recursive https://github.com/FunAudioLLM/CosyVoice.git")
+                logger.error("  4. Install: cd CosyVoice && pip install -r requirements.txt")
+                logger.error("=" * 70)
                 self._fallback_to_basic_tts()
                 return
             
-            # Initialize CosyVoice with correct parameters
+            # Check if model exists locally
+            logger.info("-" * 70)
+            logger.info("CHECKING MODEL AVAILABILITY")
+            logger.info("-" * 70)
+            
+            model_path_abs = os.path.abspath(self.service_config.model_path)
+            logger.info(f"Looking for model at: {model_path_abs}")
+            
+            if not os.path.exists(model_path_abs):
+                logger.warning(f"✗ Model not found at: {model_path_abs}")
+                
+                if self.service_config.use_modelscope:
+                    logger.info("Attempting to download from ModelScope...")
+                    try:
+                        from modelscope import snapshot_download
+                        logger.info(f"Downloading model: {self.service_config.modelscope_model_id}")
+                        logger.info("This may take several minutes (model size ~1GB)...")
+                        
+                        # Download model
+                        snapshot_download(
+                            self.service_config.modelscope_model_id,
+                            local_dir=model_path_abs
+                        )
+                        logger.info("✓ Model downloaded successfully")
+                        
+                    except Exception as e:
+                        logger.error(f"✗ Failed to download model: {e}")
+                        logger.error("")
+                        logger.error("Please download the model manually:")
+                        logger.error(f"  cd {os.path.dirname(model_path_abs)}")
+                        logger.error(f"  python -c \"from modelscope import snapshot_download; snapshot_download('{self.service_config.modelscope_model_id}', local_dir='{os.path.basename(model_path_abs)}')\"")
+                        self._fallback_to_basic_tts()
+                        return
+                else:
+                    logger.error("✗ Model not found and auto-download is disabled")
+                    logger.error("")
+                    logger.error("Please download the model manually:")
+                    logger.error(f"  cd {os.path.dirname(model_path_abs)}")
+                    logger.error(f"  python -c \"from modelscope import snapshot_download; snapshot_download('{self.service_config.modelscope_model_id}', local_dir='{os.path.basename(model_path_abs)}')\"")
+                    self._fallback_to_basic_tts()
+                    return
+            else:
+                logger.info(f"✓ Model found at: {model_path_abs}")
+            
+            # Initialize CosyVoice model (official way)
             logger.info("-" * 70)
             logger.info("INITIALIZING COSYVOICE MODEL")
             logger.info("-" * 70)
-            logger.info(f"Model identifier: {self.service_config.model_path}")
-            logger.info("This may take several minutes on first run (downloading model)...")
+            logger.info("Loading model (this may take 30-60 seconds)...")
             
-            model_loaded = False
-            
-            # Try initialization with different parameter combinations
             try:
-                logger.debug("Attempt 1: Trying with load_jit, load_trt, and fp16 parameters")
-                self.model = CosyVoice(
-                    self.service_config.model_path,
-                    load_jit=False,  # Set to False for faster loading
-                    load_trt=False,  # TensorRT optimization (requires TensorRT)
-                    fp16=False       # Use FP32 for better quality
-                )
-                logger.info("✓ Model loaded with full parameters (load_jit, load_trt, fp16)")
-                model_loaded = True
+                # Official CosyVoice initialization
+                # Following the official examples from the repo
+                self.model = CosyVoice(model_path_abs)
+                logger.info("✓ Model loaded successfully")
                 
-            except TypeError as e:
-                logger.debug(f"Attempt 1 failed with TypeError: {e}")
-                logger.debug("Attempt 2: Trying with load_jit parameter only")
-                try:
-                    self.model = CosyVoice(
-                        self.service_config.model_path,
-                        load_jit=False
-                    )
-                    logger.info("✓ Model loaded with load_jit parameter only")
-                    model_loaded = True
-                    
-                except TypeError as e2:
-                    logger.debug(f"Attempt 2 failed with TypeError: {e2}")
-                    logger.debug("Attempt 3: Trying with model path only (no optional params)")
-                    try:
-                        self.model = CosyVoice(self.service_config.model_path)
-                        logger.info("✓ Model loaded with model path only")
-                        model_loaded = True
-                    except Exception as e3:
-                        logger.error(f"Attempt 3 failed: {e3}")
-                        logger.error(f"Full traceback:\n{traceback.format_exc()}")
-                        raise
-                        
             except Exception as e:
                 logger.error(f"✗ Model initialization failed: {e}")
-                logger.error(f"Error type: {type(e).__name__}")
                 logger.error(f"Full traceback:\n{traceback.format_exc()}")
-                raise
+                logger.error("")
+                logger.error("Troubleshooting:")
+                logger.error("  1. Verify model files exist in: {model_path_abs}")
+                logger.error("  2. Check you're using the correct conda environment")
+                logger.error("  3. Try re-downloading the model")
+                logger.error("  4. Check CosyVoice GitHub for updates")
+                self._fallback_to_basic_tts()
+                return
             
-            if not model_loaded:
-                raise RuntimeError("Failed to load model with any parameter combination")
+            logger.info("✓ Model initialization completed successfully")
             
-            logger.info("Model initialization completed successfully")
-            
-            # Move model to device
-            logger.info("-" * 70)
-            logger.info("MOVING MODEL TO DEVICE")
-            logger.info("-" * 70)
-            
-            if self.service_config.device == "cuda":
-                if not torch.cuda.is_available():
-                    logger.warning("CUDA requested but not available, falling back to CPU")
-                    self.service_config.device = "cpu"
-                else:
-                    logger.info("Moving model to CUDA device...")
-                    try:
-                        self.model = self.model.to("cuda")
-                        logger.info(f"✓ Model successfully moved to CUDA")
-                        
-                        # Log GPU memory usage
-                        if torch.cuda.is_available():
-                            memory_allocated = torch.cuda.memory_allocated(0) / 1024**3  # GB
-                            memory_reserved = torch.cuda.memory_reserved(0) / 1024**3  # GB
-                            logger.debug(f"GPU memory allocated: {memory_allocated:.2f} GB")
-                            logger.debug(f"GPU memory reserved: {memory_reserved:.2f} GB")
-                    except Exception as e:
-                        logger.error(f"✗ Failed to move model to CUDA: {e}")
-                        logger.error(f"Traceback:\n{traceback.format_exc()}")
-                        raise
-            else:
-                logger.info(f"Model will use device: {self.service_config.device}")
+            # Note: CosyVoice handles device placement internally
+            logger.info(f"Model device: {self.service_config.device}")
+            if torch.cuda.is_available() and self.service_config.device == "cuda":
+                memory_allocated = torch.cuda.memory_allocated(0) / 1024**3  # GB
+                memory_reserved = torch.cuda.memory_reserved(0) / 1024**3  # GB
+                logger.info(f"GPU memory allocated: {memory_allocated:.2f} GB")
+                logger.info(f"GPU memory reserved: {memory_reserved:.2f} GB")
             
             # Get available speakers
             logger.info("-" * 70)
@@ -238,21 +224,29 @@ class SynthesisEngine:
             self._fallback_to_basic_tts()
     
     def _load_available_speakers(self):
-        """Load available speaker voices"""
+        """Load available speaker voices from CosyVoice model"""
         try:
-            # CosyVoice2 supports multiple speakers
-            # This is a placeholder - actual implementation depends on model
-            self.available_speakers = [
-                "default",
-                "female_calm",
-                "male_energetic",
-                "female_friendly",
-                "male_professional"
-            ]
-            logger.info(f"Loaded {len(self.available_speakers)} available speakers")
+            if self.model != "fallback" and hasattr(self.model, 'list_available_spks'):
+                # Get speakers from model (official API)
+                self.available_speakers = self.model.list_available_spks()
+                logger.info(f"Loaded {len(self.available_speakers)} speakers from model")
+                for spk in self.available_speakers:
+                    logger.info(f"  - {spk}")
+            else:
+                # Default speakers for SFT model
+                self.available_speakers = [
+                    "中文女",
+                    "中文男", 
+                    "日语男",
+                    "粤语女",
+                    "英文女",
+                    "英文男",
+                    "韩语女"
+                ]
+                logger.info(f"Using default speaker list ({len(self.available_speakers)} speakers)")
         except Exception as e:
             logger.warning(f"Failed to load speakers: {e}")
-            self.available_speakers = ["default"]
+            self.available_speakers = ["中文女"]
     
     def _fallback_to_basic_tts(self):
         """Fallback to basic TTS if CosyVoice2 is not available"""
@@ -364,44 +358,66 @@ class SynthesisEngine:
         voice_config: VoiceConfig,
         synthesis_config: SynthesisConfig
     ) -> np.ndarray:
-        """Synthesize using CosyVoice2 model"""
+        """Synthesize using CosyVoice model (official API)"""
+        import traceback
+        
         try:
-            # Prepare generation parameters
-            generation_params = {
-                "speaker": voice_config.speaker if voice_config.speaker in self.available_speakers else "default",
-                "speed": voice_config.speed,
-            }
+            # Select speaker
+            speaker = voice_config.speaker if voice_config.speaker in self.available_speakers else self.available_speakers[0]
             
-            # Generate speech
-            # Note: Actual API depends on CosyVoice2 implementation
+            # Use official CosyVoice API: inference_sft for SFT models
             if hasattr(self.model, 'inference_sft'):
-                # Standard inference
+                logger.debug(f"Using inference_sft with speaker: {speaker}, speed: {voice_config.speed}")
+                
+                # Official API call (non-streaming)
                 audio_generator = self.model.inference_sft(
                     text,
-                    speaker=generation_params["speaker"],
-                    speed=generation_params["speed"]
+                    speaker,
+                    stream=False  # Non-streaming mode for batch synthesis
                 )
                 
-                # Collect audio chunks
+                # Collect audio chunks from generator
                 audio_chunks = []
-                for audio_chunk in audio_generator:
-                    audio_chunks.append(audio_chunk['tts_speech'])
+                for i, audio_chunk in enumerate(audio_generator):
+                    # CosyVoice returns dict with 'tts_speech' key
+                    if isinstance(audio_chunk, dict) and 'tts_speech' in audio_chunk:
+                        chunk_tensor = audio_chunk['tts_speech']
+                        # Convert tensor to numpy
+                        if torch.is_tensor(chunk_tensor):
+                            chunk_audio = chunk_tensor.cpu().numpy()
+                        else:
+                            chunk_audio = chunk_tensor
+                        audio_chunks.append(chunk_audio)
+                        logger.debug(f"Received audio chunk {i}: shape={chunk_audio.shape}")
+                    else:
+                        logger.warning(f"Unexpected chunk format: {type(audio_chunk)}")
                 
-                # Concatenate audio
+                if not audio_chunks:
+                    raise ValueError("No audio generated from model")
+                
+                # Concatenate all chunks
                 audio = np.concatenate(audio_chunks, axis=0)
                 
+                # Ensure 1D array
+                if audio.ndim > 1:
+                    audio = audio.squeeze()
+                
+                logger.debug(f"Final audio shape: {audio.shape}")
+                
             else:
-                # Fallback to basic generation
-                audio = self._fallback_synthesize(text, voice_config)
+                logger.error("Model does not have inference_sft method")
+                return self._fallback_synthesize(text, voice_config)
             
-            # Apply pitch and energy modifications
+            # Apply voice modifications if needed
             if voice_config.pitch != 1.0 or voice_config.energy != 1.0:
                 audio = self._apply_voice_modifications(audio, voice_config)
             
             return audio
             
         except Exception as e:
-            logger.error(f"CosyVoice2 synthesis error: {e}, falling back to basic synthesis")
+            logger.error(f"CosyVoice synthesis error: {e}")
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            logger.warning("Falling back to basic synthesis")
             return self._fallback_synthesize(text, voice_config)
     
     def _fallback_synthesize(self, text: str, voice_config: VoiceConfig) -> np.ndarray:
@@ -474,7 +490,7 @@ class SynthesisEngine:
         chunk_size: int = 1024
     ) -> Iterator[np.ndarray]:
         """
-        Synthesize speech with streaming output
+        Synthesize speech with streaming output (official CosyVoice streaming API)
         
         Args:
             text: Input text
@@ -485,6 +501,8 @@ class SynthesisEngine:
         Yields:
             Audio chunks as numpy arrays
         """
+        import traceback
+        
         try:
             if self.model == "fallback":
                 # Fallback: generate all at once then chunk
@@ -495,35 +513,46 @@ class SynthesisEngine:
                     yield audio[i:i + chunk_size]
                     
             else:
-                # CosyVoice2 streaming
+                # Official CosyVoice streaming API
                 if hasattr(self.model, 'inference_sft'):
-                    generation_params = {
-                        "speaker": voice_config.speaker if voice_config.speaker in self.available_speakers else "default",
-                        "speed": voice_config.speed,
-                    }
+                    speaker = voice_config.speaker if voice_config.speaker in self.available_speakers else self.available_speakers[0]
                     
+                    logger.debug(f"Streaming synthesis: speaker={speaker}, stream=True")
+                    
+                    # Use streaming mode (official API)
                     audio_generator = self.model.inference_sft(
                         text,
-                        speaker=generation_params["speaker"],
-                        speed=generation_params["speed"],
-                        stream=True
+                        speaker,
+                        stream=True  # Enable streaming
                     )
                     
                     for audio_chunk in audio_generator:
-                        if 'tts_speech' in audio_chunk:
-                            chunk_audio = audio_chunk['tts_speech']
+                        if isinstance(audio_chunk, dict) and 'tts_speech' in audio_chunk:
+                            chunk_tensor = audio_chunk['tts_speech']
+                            
+                            # Convert to numpy
+                            if torch.is_tensor(chunk_tensor):
+                                chunk_audio = chunk_tensor.cpu().numpy()
+                            else:
+                                chunk_audio = chunk_tensor
+                            
+                            # Ensure 1D
+                            if chunk_audio.ndim > 1:
+                                chunk_audio = chunk_audio.squeeze()
                             
                             # Yield in specified chunk sizes
                             for i in range(0, len(chunk_audio), chunk_size):
                                 yield chunk_audio[i:i + chunk_size]
                 else:
                     # No streaming support, fallback
+                    logger.warning("Model doesn't support streaming, using batch mode")
                     audio = self._fallback_synthesize(text, voice_config)
                     for i in range(0, len(audio), chunk_size):
                         yield audio[i:i + chunk_size]
                         
         except Exception as e:
             logger.error(f"Streaming synthesis error: {e}")
+            logger.error(f"Traceback: {traceback.format_exc()}")
             raise
     
     def get_model_info(self) -> Dict[str, Any]:
