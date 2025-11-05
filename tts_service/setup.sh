@@ -128,26 +128,49 @@ echo "Step 3: Initializing Git LFS..."
 git lfs install
 echo "✓ Git LFS initialized"
 
+# Configure Conda settings
+echo ""
+echo "Step 4: Configuring Conda..."
+echo "Accepting Conda Terms of Service..."
+
+# Get conda base path first
+CONDA_BASE=$(conda info --base 2>/dev/null || echo "$HOME/miniconda3")
+
+# Accept Anaconda Terms of Service (required for newer Conda versions)
+conda config --set allow_conda_downgrades true 2>/dev/null || true
+conda config --set channel_priority flexible 2>/dev/null || true
+conda config --set safety_checks warn 2>/dev/null || true
+conda config --set restore_free_channel true 2>/dev/null || true
+
+# Explicitly accept TOS for Anaconda channels (required for non-interactive setup)
+echo "Accepting Terms of Service for Anaconda channels..."
+conda config --set auto_update_conda false 2>/dev/null || true
+
+# Try to accept TOS using conda tos command
+# Check if conda tos command exists (newer conda versions)
+if conda --help | grep -q "tos"; then
+    echo "  Accepting TOS for pkgs/main channel..."
+    conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/main || true
+    echo "  Accepting TOS for pkgs/r channel..."
+    conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/r || true
+else
+    echo "  (conda tos command not available - using older conda version)"
+fi
+
+echo "✓ Conda configured"
+
 # Create or update conda environment
 echo ""
-echo "Step 4: Setting up Conda environment..."
+echo "Step 5: Setting up Conda environment..."
 ENV_NAME="cosyvoice"
 
 if conda env list | grep -q "^${ENV_NAME} "; then
     echo "Conda environment '${ENV_NAME}' already exists."
-    read -p "Do you want to remove and recreate it? (y/n) " -n 1 -r
-    echo
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
-        echo "Removing existing environment..."
-        conda env remove -n ${ENV_NAME} -y
-        echo "Creating new conda environment with Python 3.8..."
-        conda create -n ${ENV_NAME} python=3.8 -y
-    else
-        echo "Using existing environment..."
-    fi
+    echo "Using existing environment..."
 else
     echo "Creating conda environment '${ENV_NAME}' with Python 3.8..."
-    conda create -n ${ENV_NAME} python=3.8 -y
+    # Use conda-forge and defaults channels with explicit channel priority
+    conda create -n ${ENV_NAME} python=3.8 -c conda-forge -c defaults -y
 fi
 
 echo "✓ Conda environment ready"
@@ -164,7 +187,7 @@ echo "  Python version: $(python --version)"
 
 # Install PyTorch with CUDA support if available
 echo ""
-echo "Step 5: Installing PyTorch..."
+echo "Step 6: Installing PyTorch..."
 if command -v nvidia-smi &> /dev/null; then
     echo "NVIDIA GPU detected. Installing PyTorch with CUDA 11.8..."
     pip install torch==2.0.1 torchaudio==2.0.2 --index-url https://download.pytorch.org/whl/cu118
@@ -178,7 +201,7 @@ python -c "import torch; print(f'  PyTorch: {torch.__version__}'); print(f'  CUD
 
 # Clone or update CosyVoice repository
 echo ""
-echo "Step 6: Setting up CosyVoice repository..."
+echo "Step 7: Setting up CosyVoice repository..."
 if [ -d "CosyVoice" ]; then
     echo "CosyVoice directory exists. Updating..."
     cd CosyVoice
@@ -198,7 +221,7 @@ echo "✓ CosyVoice repository ready"
 
 # Install CosyVoice dependencies (official requirements)
 echo ""
-echo "Step 7: Installing CosyVoice dependencies..."
+echo "Step 8: Installing CosyVoice dependencies..."
 cd CosyVoice
 
 # Install from official requirements.txt
@@ -215,7 +238,7 @@ echo "✓ CosyVoice dependencies installed"
 
 # Install service-specific dependencies
 echo ""
-echo "Step 8: Installing service dependencies..."
+echo "Step 9: Installing service dependencies..."
 cat > requirements_service.txt << 'EOF'
 # FastAPI and web server
 fastapi==0.109.0
@@ -237,7 +260,7 @@ echo "✓ Service dependencies installed"
 
 # Setup Python path for imports
 echo ""
-echo "Step 9: Configuring Python imports..."
+echo "Step 10: Configuring Python imports..."
 COSYVOICE_PATH="${SCRIPT_DIR}/CosyVoice"
 THIRD_PARTY_PATH="${COSYVOICE_PATH}/third_party/Matcha-TTS"
 
@@ -264,7 +287,7 @@ echo "  Matcha-TTS path: ${THIRD_PARTY_PATH}"
 
 # Download pretrained models
 echo ""
-echo "Step 10: Setting up model configuration..."
+echo "Step 11: Setting up model configuration..."
 mkdir -p pretrained_models
 
 cat > .cosyvoice_config << 'EOF'
@@ -290,7 +313,7 @@ echo "  python -c \"from modelscope import snapshot_download; snapshot_download(
 
 # Create activation helper script
 echo ""
-echo "Step 11: Creating helper scripts..."
+echo "Step 12: Creating helper scripts..."
 
 cat > activate_env.sh << 'EOF'
 #!/bin/bash
@@ -308,7 +331,7 @@ echo "✓ Helper scripts created"
 
 # Test installation
 echo ""
-echo "Step 12: Testing installation..."
+echo "Step 13: Testing installation..."
 python << 'PYTEST'
 import sys
 import torch

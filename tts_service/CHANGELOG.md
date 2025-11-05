@@ -2,7 +2,32 @@
 
 ## Latest Updates
 
-### ✨ Auto-Install Conda (Latest)
+### 🔧 Auto-Accept Conda TOS (Latest Fix)
+
+**Date:** November 2024
+
+**What's Fixed:**
+- ✅ **Automatic TOS Acceptance** - Fixes "Terms of Service have not been accepted" error
+- The `setup.sh` script now automatically accepts Conda/Anaconda Terms of Service
+- No manual interaction required during setup
+- Works with both old and new Conda versions
+
+**Technical Details:**
+The script now:
+1. Configures Conda settings for non-interactive use
+2. Detects if `conda tos` command is available
+3. Automatically accepts TOS for `pkgs/main` and `pkgs/r` channels
+4. Falls back gracefully for older Conda versions
+
+**Migration:**
+If you encountered the TOS error, just re-run:
+```bash
+./setup.sh
+```
+
+---
+
+### ✨ Auto-Install Conda
 
 **Date:** November 2024
 
