@@ -57,68 +57,184 @@ class SynthesisEngine:
         self._load_model()
     
     def _load_model(self):
-        """Load the CosyVoice2-0.5B model"""
+        """Load the CosyVoice2-0.5B model with detailed debug logging"""
+        import os
+        import sys
+        import traceback
+        
         try:
-            logger.info(f"Loading CosyVoice2 model: {self.service_config.model_name}")
-            logger.info(f"Model path: {self.service_config.model_path}")
-            logger.info(f"Device: {self.service_config.device}")
+            logger.info("=" * 70)
+            logger.info("STARTING MODEL LOADING PROCESS")
+            logger.info("=" * 70)
+            
+            # Log system information
+            logger.debug(f"Python version: {sys.version}")
+            logger.debug(f"PyTorch version: {torch.__version__}")
+            logger.debug(f"CUDA available: {torch.cuda.is_available()}")
+            if torch.cuda.is_available():
+                logger.debug(f"CUDA version: {torch.version.cuda}")
+                logger.debug(f"GPU count: {torch.cuda.device_count()}")
+                logger.debug(f"Current GPU: {torch.cuda.current_device()}")
+                logger.debug(f"GPU name: {torch.cuda.get_device_name(0)}")
+            
+            # Log configuration
+            logger.info(f"Model name: {self.service_config.model_name}")
+            logger.info(f"Model path/ID: {self.service_config.model_path}")
+            logger.info(f"Target device: {self.service_config.device}")
+            logger.info(f"Model cache dir: {self.service_config.model_cache_dir}")
+            
+            # Check cache directory
+            cache_dir = os.path.expanduser("~/.cache/modelscope/hub")
+            logger.debug(f"ModelScope cache directory: {cache_dir}")
+            logger.debug(f"Cache directory exists: {os.path.exists(cache_dir)}")
+            
+            model_cache_path = os.path.join(cache_dir, self.service_config.model_path)
+            logger.debug(f"Expected model cache path: {model_cache_path}")
+            logger.debug(f"Model cached locally: {os.path.exists(model_cache_path)}")
             
             # Import CosyVoice model
+            logger.info("Attempting to import CosyVoice library...")
             try:
                 from cosyvoice.cli.cosyvoice import CosyVoice
                 from cosyvoice.utils.file_utils import load_wav
+                logger.info("✓ CosyVoice library imported successfully")
                 
-                # Initialize CosyVoice with correct parameters
-                # Official docs: https://github.com/FunAudioLLM/CosyVoice
-                # Parameters: load_jit (JIT compilation), load_trt (TensorRT), fp16 (precision)
-                logger.info("Initializing CosyVoice model...")
-                
+                # Check CosyVoice version if available
                 try:
-                    # Try with all parameters (newer versions)
-                    self.model = CosyVoice(
-                        self.service_config.model_path,
-                        load_jit=False,  # Set to False for faster loading
-                        load_trt=False,  # TensorRT optimization (requires TensorRT)
-                        fp16=False       # Use FP32 for better quality
-                    )
-                    logger.info("Loaded CosyVoice with full parameters")
-                except TypeError as e:
-                    logger.info(f"Full parameter initialization failed: {e}")
-                    # Try without optional parameters
-                    try:
-                        self.model = CosyVoice(
-                            self.service_config.model_path,
-                            load_jit=False
-                        )
-                        logger.info("Loaded CosyVoice with load_jit parameter only")
-                    except TypeError:
-                        # Fallback to just model path (oldest versions)
-                        logger.info("Trying with model path only")
-                        self.model = CosyVoice(self.service_config.model_path)
-                        logger.info("Loaded CosyVoice with model path only")
-                
-                # Move model to device
-                if self.service_config.device == "cuda":
-                    logger.info("Moving model to CUDA...")
-                    self.model = self.model.to("cuda")
-                
-                logger.info("CosyVoice model loaded successfully!")
-                
-                # Get available speakers
-                self._load_available_speakers()
-                
-                # Warm up the model
-                self._warmup()
+                    import cosyvoice
+                    if hasattr(cosyvoice, '__version__'):
+                        logger.debug(f"CosyVoice version: {cosyvoice.__version__}")
+                except:
+                    logger.debug("CosyVoice version not available")
                 
             except ImportError as e:
-                logger.error(f"Failed to import CosyVoice: {e}")
+                logger.error(f"✗ Failed to import CosyVoice: {e}")
+                logger.error(f"Import error traceback:\n{traceback.format_exc()}")
                 logger.warning("CosyVoice not installed. Install it with:")
                 logger.warning("  git clone https://github.com/FunAudioLLM/CosyVoice.git")
                 logger.warning("  cd CosyVoice && pip install -r requirements.txt")
                 self._fallback_to_basic_tts()
+                return
+            
+            # Initialize CosyVoice with correct parameters
+            logger.info("-" * 70)
+            logger.info("INITIALIZING COSYVOICE MODEL")
+            logger.info("-" * 70)
+            logger.info(f"Model identifier: {self.service_config.model_path}")
+            logger.info("This may take several minutes on first run (downloading model)...")
+            
+            model_loaded = False
+            
+            # Try initialization with different parameter combinations
+            try:
+                logger.debug("Attempt 1: Trying with load_jit, load_trt, and fp16 parameters")
+                self.model = CosyVoice(
+                    self.service_config.model_path,
+                    load_jit=False,  # Set to False for faster loading
+                    load_trt=False,  # TensorRT optimization (requires TensorRT)
+                    fp16=False       # Use FP32 for better quality
+                )
+                logger.info("✓ Model loaded with full parameters (load_jit, load_trt, fp16)")
+                model_loaded = True
+                
+            except TypeError as e:
+                logger.debug(f"Attempt 1 failed with TypeError: {e}")
+                logger.debug("Attempt 2: Trying with load_jit parameter only")
+                try:
+                    self.model = CosyVoice(
+                        self.service_config.model_path,
+                        load_jit=False
+                    )
+                    logger.info("✓ Model loaded with load_jit parameter only")
+                    model_loaded = True
+                    
+                except TypeError as e2:
+                    logger.debug(f"Attempt 2 failed with TypeError: {e2}")
+                    logger.debug("Attempt 3: Trying with model path only (no optional params)")
+                    try:
+                        self.model = CosyVoice(self.service_config.model_path)
+                        logger.info("✓ Model loaded with model path only")
+                        model_loaded = True
+                    except Exception as e3:
+                        logger.error(f"Attempt 3 failed: {e3}")
+                        logger.error(f"Full traceback:\n{traceback.format_exc()}")
+                        raise
+                        
+            except Exception as e:
+                logger.error(f"✗ Model initialization failed: {e}")
+                logger.error(f"Error type: {type(e).__name__}")
+                logger.error(f"Full traceback:\n{traceback.format_exc()}")
+                raise
+            
+            if not model_loaded:
+                raise RuntimeError("Failed to load model with any parameter combination")
+            
+            logger.info("Model initialization completed successfully")
+            
+            # Move model to device
+            logger.info("-" * 70)
+            logger.info("MOVING MODEL TO DEVICE")
+            logger.info("-" * 70)
+            
+            if self.service_config.device == "cuda":
+                if not torch.cuda.is_available():
+                    logger.warning("CUDA requested but not available, falling back to CPU")
+                    self.service_config.device = "cpu"
+                else:
+                    logger.info("Moving model to CUDA device...")
+                    try:
+                        self.model = self.model.to("cuda")
+                        logger.info(f"✓ Model successfully moved to CUDA")
+                        
+                        # Log GPU memory usage
+                        if torch.cuda.is_available():
+                            memory_allocated = torch.cuda.memory_allocated(0) / 1024**3  # GB
+                            memory_reserved = torch.cuda.memory_reserved(0) / 1024**3  # GB
+                            logger.debug(f"GPU memory allocated: {memory_allocated:.2f} GB")
+                            logger.debug(f"GPU memory reserved: {memory_reserved:.2f} GB")
+                    except Exception as e:
+                        logger.error(f"✗ Failed to move model to CUDA: {e}")
+                        logger.error(f"Traceback:\n{traceback.format_exc()}")
+                        raise
+            else:
+                logger.info(f"Model will use device: {self.service_config.device}")
+            
+            # Get available speakers
+            logger.info("-" * 70)
+            logger.info("LOADING AVAILABLE SPEAKERS")
+            logger.info("-" * 70)
+            try:
+                self._load_available_speakers()
+                logger.info(f"✓ Loaded {len(self.available_speakers)} speakers")
+                logger.debug(f"Available speakers: {self.available_speakers}")
+            except Exception as e:
+                logger.error(f"✗ Failed to load speakers: {e}")
+                logger.error(f"Traceback:\n{traceback.format_exc()}")
+                # Continue anyway with default speakers
+            
+            # Warm up the model
+            logger.info("-" * 70)
+            logger.info("WARMING UP MODEL")
+            logger.info("-" * 70)
+            try:
+                self._warmup()
+                logger.info("✓ Model warmup completed")
+            except Exception as e:
+                logger.warning(f"⚠ Model warmup failed (non-critical): {e}")
+                logger.debug(f"Warmup traceback:\n{traceback.format_exc()}")
+            
+            logger.info("=" * 70)
+            logger.info("✓ MODEL LOADING COMPLETED SUCCESSFULLY!")
+            logger.info("=" * 70)
                 
         except Exception as e:
-            logger.error(f"Failed to load model: {e}")
+            logger.error("=" * 70)
+            logger.error("✗ MODEL LOADING FAILED")
+            logger.error("=" * 70)
+            logger.error(f"Error: {e}")
+            logger.error(f"Error type: {type(e).__name__}")
+            logger.error(f"Full traceback:\n{traceback.format_exc()}")
+            logger.error("=" * 70)
             self._fallback_to_basic_tts()
     
     def _load_available_speakers(self):
@@ -140,32 +256,56 @@ class SynthesisEngine:
     
     def _fallback_to_basic_tts(self):
         """Fallback to basic TTS if CosyVoice2 is not available"""
-        logger.warning("Using fallback TTS engine (basic synthesis)")
-        logger.warning("Install CosyVoice2 for full functionality:")
-        logger.warning("  git clone https://github.com/FunAudioLLM/CosyVoice.git")
-        logger.warning("  cd CosyVoice && pip install -r requirements.txt")
+        logger.warning("=" * 70)
+        logger.warning("ENTERING FALLBACK MODE")
+        logger.warning("=" * 70)
+        logger.warning("⚠ Using fallback TTS engine (basic sine wave synthesis)")
+        logger.warning("⚠ This is NOT production quality - for testing only!")
+        logger.warning("")
+        logger.warning("To enable full CosyVoice2 functionality:")
+        logger.warning("  1. git clone https://github.com/FunAudioLLM/CosyVoice.git")
+        logger.warning("  2. cd CosyVoice && pip install -r requirements.txt")
+        logger.warning("  3. Restart this service")
+        logger.warning("=" * 70)
         
         # Set flag for fallback mode
         self.model = "fallback"
         self.available_speakers = ["default"]
+        logger.debug("Fallback mode initialized with default speaker only")
     
     def _warmup(self):
         """Warm up the model with dummy input"""
+        import traceback
+        
         try:
-            logger.info("Warming up model...")
+            logger.info("Starting model warmup with dummy synthesis...")
             dummy_text = "Hello, this is a test."
+            logger.debug(f"Warmup text: '{dummy_text}'")
             
             if self.model != "fallback":
+                logger.debug("Running actual model warmup synthesis...")
+                start_time = time.time()
+                
                 # Actual warmup with model
-                _ = self.synthesize(
+                result = self.synthesize(
                     dummy_text,
                     VoiceConfig(),
                     SynthesisConfig()
                 )
+                
+                warmup_time = time.time() - start_time
+                logger.info(f"✓ Warmup synthesis completed in {warmup_time:.2f}s")
+                logger.debug(f"Warmup audio duration: {result.audio_duration:.2f}s")
+                logger.debug(f"Warmup RTF: {result.realtime_factor:.2f}x")
+            else:
+                logger.debug("Skipping warmup (fallback mode)")
             
-            logger.info("Model warmed up")
+            logger.info("✓ Model warmup completed successfully")
+            
         except Exception as e:
-            logger.warning(f"Warmup failed: {e}")
+            logger.warning(f"⚠ Warmup failed (non-critical): {e}")
+            logger.debug(f"Warmup error traceback:\n{traceback.format_exc()}")
+            logger.info("Continuing without warmup...")
     
     def synthesize(
         self,

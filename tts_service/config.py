@@ -11,13 +11,13 @@ import torch
 
 class ServiceConfig(BaseModel):
     """Server-level configuration"""
-    model_name: str = "CosyVoice2-0.5B"  # CosyVoice2-0.5B model
-    model_path: str = "FunAudioLLM/CosyVoice2-0.5B"  # Hugging Face model path
+    model_name: str = "CosyVoice2-0.5B"  # CosyVoice2-0.5B model (newer, smaller, faster)
+    model_path: str = "iic/CosyVoice2-0.5B"  # ModelScope model path (official)
     device: str = "cuda" if torch.cuda.is_available() else "cpu"
     host: str = "0.0.0.0"
     port: int = 8002
     model_cache_dir: str = "./models"
-    log_level: str = "info"
+    log_level: str = "debug"  # Set to "debug" for detailed model loading logs, "info" for production
     max_text_length: int = 5000  # Maximum text length in characters
 
 
