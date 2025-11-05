@@ -72,6 +72,60 @@ TRUST_REMOTE_CODE="--trust-remote-code"
 | `./llm_manager.sh logs` | View service logs (tail -f) |
 | `./llm_manager.sh test` | Run basic performance test |
 
+## Testing
+
+The LLM service includes comprehensive testing tools with **automatic environment setup**. See [TESTING.md](TESTING.md) for detailed documentation.
+
+### Quick Testing
+
+**Shell-based tests (no dependencies):**
+```bash
+# Run quick test suite
+./test_llm.sh quick
+
+# Test individual endpoints
+./test_llm.sh health
+./test_llm.sh completion
+./test_llm.sh stream
+```
+
+**Python-based tests (auto-setup, recommended):**
+```bash
+# No installation needed - automatically creates venv and installs dependencies!
+python3 test_client.py              # Comprehensive tests
+python3 test_stream.py              # Streaming tests
+python3 load_test.py --requests 100 # Load tests
+
+# Or use the smart runner with shortcuts
+./run_test.sh quick                 # Run comprehensive tests
+./run_test.sh stream --verbose      # Streaming with output
+./run_test.sh load --requests 500   # Load test
+```
+
+**First run:** Automatically sets up environment (~30 seconds)  
+**Subsequent runs:** Uses existing environment (instant)
+
+### Test Clients
+
+| Client | Purpose | Key Features |
+|--------|---------|--------------|
+| `test_llm.sh` | Quick shell tests | No dependencies, fast health checks |
+| `test_client.py` | Comprehensive testing | All endpoints, metrics, concurrency |
+| `test_stream.py` | Streaming focus | Time to first token, chunk analysis |
+| `load_test.py` | Load & performance | High volume, latency metrics (P95, P99) |
+
+**Example outputs:**
+```bash
+# Quick performance check
+python3 test_client.py --requests 20 --concurrent 5
+
+# Streaming performance
+python3 test_stream.py --num-tests 10 --verbose
+
+# Load test with ramp-up
+python3 load_test.py --requests 500 --concurrent 25 --ramp-up 10
+```
+
 ## Multiple Model Deployments
 
 To run multiple models simultaneously:
