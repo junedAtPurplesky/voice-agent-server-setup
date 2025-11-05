@@ -48,7 +48,7 @@ cd tts_service
 
 The setup script will:
 - ✅ Auto-install Miniconda if not found (supports Linux x86_64/ARM64, macOS Intel/Apple Silicon)
-- ✅ Create conda environment with Python 3.8
+- ✅ Create conda environment with Python 3.10
 - ✅ Install PyTorch with CUDA support (if GPU available)
 - ✅ Clone official CosyVoice repository
 - ✅ Install all dependencies correctly
@@ -56,6 +56,8 @@ The setup script will:
 - ✅ Test installation
 
 **Duration:** 10-20 minutes (first time includes Conda installation if needed)
+
+> **Note:** We use Python 3.10 (not 3.8) because current CosyVoice dependencies require it.
 
 ### Step 2: Start Service
 

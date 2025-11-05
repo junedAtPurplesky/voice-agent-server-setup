@@ -197,11 +197,21 @@ ENV_NAME="cosyvoice"
 
 if conda env list | grep -q "^${ENV_NAME} "; then
     echo "Conda environment '${ENV_NAME}' already exists."
-    echo "Using existing environment..."
+    read -p "Do you want to remove and recreate it? (y/n) " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        echo "Removing existing environment..."
+        conda env remove -n ${ENV_NAME} -y
+        echo "Creating new conda environment with Python 3.10..."
+        conda create -n ${ENV_NAME} python=3.10 -c conda-forge -c defaults -y
+    else
+        echo "Using existing environment..."
+    fi
 else
-    echo "Creating conda environment '${ENV_NAME}' with Python 3.8..."
-    # Use conda-forge and defaults channels with explicit channel priority
-    conda create -n ${ENV_NAME} python=3.8 -c conda-forge -c defaults -y
+    echo "Creating conda environment '${ENV_NAME}' with Python 3.10..."
+    # Use Python 3.10 (required by current CosyVoice dependencies like gradio 5.4.0)
+    # Note: Official docs say 3.8, but current requirements.txt needs 3.10+
+    conda create -n ${ENV_NAME} python=3.10 -c conda-forge -c defaults -y
 fi
 
 echo "✓ Conda environment ready"

@@ -77,7 +77,7 @@ See **[INSTALLATION.md](INSTALLATION.md)** for detailed installation guide.
 | Component | Required |
 |-----------|----------|
 | **Conda** | ✅ Required (Miniconda/Anaconda) |
-| **Python** | 3.8 (specific version) |
+| **Python** | 3.10+ (auto-installed by setup) |
 | **RAM** | 8 GB minimum, 16 GB+ recommended |
 | **Disk** | 5 GB+ (for models) |
 | **GPU** | Optional (4GB+ VRAM for acceleration) |
@@ -111,7 +111,7 @@ cd tts_service
 The setup script will:
 1. ✅ **Auto-install Conda** if not present (supports Linux/macOS, x86_64/ARM64)
 2. ✅ Install system dependencies
-3. ✅ Create conda environment `cosyvoice` with Python 3.8
+3. ✅ Create conda environment `cosyvoice` with Python 3.10
 4. ✅ Install PyTorch with CUDA support (if available)
 5. ✅ Clone official CosyVoice repository with submodules
 6. ✅ Install official dependencies from CosyVoice/requirements.txt
@@ -120,6 +120,8 @@ The setup script will:
 9. ✅ Test installation
 
 **First Run**: Model (~1GB) downloads automatically on first use.
+
+> **Note:** Uses Python 3.10 (required by current CosyVoice dependencies)
 
 ### Manual Installation
 
@@ -132,7 +134,7 @@ This service has been **completely refactored** to follow the official CosyVoice
 | Aspect | Old | New (Official) |
 |--------|-----|----------------|
 | Environment | Python venv | ✅ Conda |
-| Python Version | 3.9+ | ✅ 3.8 (official requirement) |
+| Python Version | 3.9+ | ✅ 3.10+ (required by dependencies) |
 | CosyVoice Source | Separate install | ✅ Official clone with submodules |
 | Dependencies | Custom list | ✅ Official requirements.txt |
 | Model | CosyVoice2-0.5B | ✅ CosyVoice-300M-SFT |

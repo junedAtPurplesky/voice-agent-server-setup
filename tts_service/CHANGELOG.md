@@ -2,7 +2,32 @@
 
 ## Latest Updates
 
-### 🔧 Smart Conda Detection (Latest Fix)
+### 🔧 Python 3.10 Update (Latest Fix)
+
+**Date:** November 2024
+
+**What's Fixed:**
+- ✅ **Updated to Python 3.10** - Required by current CosyVoice dependencies
+- ✅ **Fixes gradio compatibility** - gradio 5.4.0 requires Python 3.10+
+- The setup now uses Python 3.10 instead of 3.8
+
+**Why the Change:**
+The official CosyVoice repository's `requirements.txt` has been updated with packages that require Python 3.10+:
+- `gradio==5.4.0` requires Python >=3.10
+- Other dependencies have similar requirements
+
+While the official docs mention Python 3.8, the actual code now needs 3.10.
+
+**Migration:**
+Re-run the setup script and choose to recreate the environment:
+```bash
+./setup.sh
+# When prompted, type 'y' to recreate the environment with Python 3.10
+```
+
+---
+
+### 🔧 Smart Conda Detection
 
 **Date:** November 2024
 
