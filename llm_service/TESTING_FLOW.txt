@@ -1,0 +1,241 @@
+╔══════════════════════════════════════════════════════════════════════╗
+║                  LLM SERVICE COMPLETE TESTING FLOW                    ║
+╚══════════════════════════════════════════════════════════════════════╝
+
+┌─────────────────────────────────────────────────────────────────────┐
+│ STEP 1: START YOUR LLM SERVICE                                      │
+└─────────────────────────────────────────────────────────────────────┘
+
+    $ cd llm_service
+    $ ./llm_manager.sh start
+    
+    Wait for: "✅ LLM started (PID 12345)"
+    
+    Verify: ./llm_manager.sh status
+    
+    ⏱️  Time: ~2 minutes (includes model loading)
+
+    ↓↓↓
+
+┌─────────────────────────────────────────────────────────────────────┐
+│ STEP 2: QUICK SHELL TEST (No Setup Required)                        │
+└─────────────────────────────────────────────────────────────────────┘
+
+    $ ./test_llm.sh quick
+    
+    Tests:
+    📊 Initial system resources (GPU/RAM/CPU)
+    🏥 Health check
+    ✍️  Text completion
+    💬 Chat completion
+    📊 Final resources
+    
+    Expected: "✓ All tests passed!"
+    
+    ⏱️  Time: ~15 seconds
+
+    ↓↓↓
+
+┌─────────────────────────────────────────────────────────────────────┐
+│ STEP 3: COMPREHENSIVE PYTHON TEST (Auto-Setup)                      │
+└─────────────────────────────────────────────────────────────────────┘
+
+    $ python3 test_client.py
+    
+    First Run:
+    📦 Creates .test_venv (one time)
+    ⬆️  Installs httpx, psutil
+    🚀 Runs tests
+    
+    Tests:
+    📊 Initial resources
+    🏥 Health + model detection
+    ✍️  Completion test
+    💬 Chat test
+    🌊 Streaming test
+    🔥 Performance test (20 requests, 5 concurrent)
+    📊 Final resources
+    
+    Expected: "Success Rate: 100.00%"
+    
+    ⏱️  Time: ~30 seconds (first run: ~60s with setup)
+
+    ↓↓↓
+
+┌─────────────────────────────────────────────────────────────────────┐
+│ STEP 4: STREAMING QUALITY TEST                                      │
+└─────────────────────────────────────────────────────────────────────┘
+
+    $ python3 test_stream.py
+    
+    Tests:
+    📊 Initial resources
+    🌊 5 different streaming prompts
+    ⚡ Time to first token
+    📦 Chunk timing analysis
+    🔥 Throughput measurement
+    📊 Final resources
+    
+    Expected: "Success Rate: 100.0%"
+    
+    ⏱️  Time: ~20 seconds
+
+    ↓↓↓
+
+┌─────────────────────────────────────────────────────────────────────┐
+│ STEP 5: LOAD TEST (Light Load)                                      │
+└─────────────────────────────────────────────────────────────────────┘
+
+    $ python3 load_test.py --requests 50 --concurrent 5
+    
+    Tests:
+    📊 Initial resources
+    🔥 50 total requests
+    👥 5 concurrent users
+    ⏱️  P50/P95/P99 latencies
+    📈 Token throughput
+    ❌ Error tracking
+    📊 Final resources
+    
+    Expected: "Success Rate: 100.00%"
+    
+    ⏱️  Time: ~15 seconds
+
+    ↓↓↓
+
+┌─────────────────────────────────────────────────────────────────────┐
+│ STEP 6: MEDIUM LOAD TEST (Optional)                                 │
+└─────────────────────────────────────────────────────────────────────┘
+
+    $ python3 load_test.py --requests 100 --concurrent 10
+    
+    ⏱️  Time: ~25 seconds
+
+    ↓↓↓
+
+┌─────────────────────────────────────────────────────────────────────┐
+│ STEP 7: HEAVY LOAD TEST (Optional)                                  │
+└─────────────────────────────────────────────────────────────────────┘
+
+    $ python3 load_test.py --requests 200 --concurrent 20 --ramp-up 10
+    
+    ⏱️  Time: ~40 seconds
+
+    ↓↓↓
+
+┌─────────────────────────────────────────────────────────────────────┐
+│ ✅ TESTING COMPLETE!                                                │
+└─────────────────────────────────────────────────────────────────────┘
+
+╔══════════════════════════════════════════════════════════════════════╗
+║                         SUCCESS CRITERIA                              ║
+╚══════════════════════════════════════════════════════════════════════╝
+
+✅ All tests passed
+✅ Success rate >95%
+✅ Mean response time <3s
+✅ P95 latency <5s
+✅ Token throughput >10 tokens/s
+✅ No timeouts
+✅ Resources stable (no leaks)
+✅ Service still running
+
+╔══════════════════════════════════════════════════════════════════════╗
+║                      WHAT YOU'VE TESTED                               ║
+╚══════════════════════════════════════════════════════════════════════╝
+
+✓ Health endpoint (/v1/models)
+✓ Text completions (/v1/completions)
+✓ Chat completions (/v1/chat/completions)
+✓ Streaming (SSE)
+✓ Non-streaming
+✓ Concurrent requests (up to 20)
+✓ Load capacity (up to 200 requests)
+✓ GPU/VRAM usage
+✓ RAM usage
+✓ CPU usage
+✓ Response times
+✓ Token throughput
+✓ Error rates
+✓ Latency distribution (P50/P95/P99)
+
+╔══════════════════════════════════════════════════════════════════════╗
+║                    QUICK REFERENCE COMMANDS                           ║
+╚══════════════════════════════════════════════════════════════════════╝
+
+Service Management:
+  ./llm_manager.sh start     - Start service
+  ./llm_manager.sh stop      - Stop service
+  ./llm_manager.sh status    - Check status
+  ./llm_manager.sh logs      - View logs
+
+Shell Tests:
+  ./test_llm.sh quick        - Quick test suite
+  ./test_llm.sh health       - Health check only
+  ./test_llm.sh completion   - Completion test
+  ./test_llm.sh stream       - Stream test
+
+Python Tests:
+  python3 test_client.py     - Comprehensive
+  python3 test_stream.py     - Streaming
+  python3 load_test.py       - Load testing
+
+Smart Runner:
+  ./run_test.sh quick        - test_client.py
+  ./run_test.sh stream       - test_stream.py
+  ./run_test.sh load         - load_test.py
+
+Resources:
+  python3 resource_monitor.py - Check resources
+
+╔══════════════════════════════════════════════════════════════════════╗
+║                         DOCUMENTATION                                 ║
+╚══════════════════════════════════════════════════════════════════════╝
+
+📖 ONE_PAGE_GUIDE.md           - This flowchart in text
+📖 COMPLETE_TESTING_STEPS.md   - Detailed step-by-step guide
+📖 TEST_CHECKLIST.md           - Printable checklist
+📖 QUICKSTART_TESTING.md       - 2-minute quick start
+📖 TEST_EXAMPLES.md            - Copy-paste examples
+📖 TESTING.md                  - Comprehensive guide
+📖 RESOURCE_MONITORING.md      - Resource monitoring docs
+📖 VLLM_API_ENDPOINTS.md       - API reference
+
+╔══════════════════════════════════════════════════════════════════════╗
+║                    TROUBLESHOOTING QUICK FIXES                        ║
+╚══════════════════════════════════════════════════════════════════════╝
+
+Service not starting?
+  → ./llm_manager.sh logs
+  → Check GPU: nvidia-smi
+  → Check port: lsof -i :8000
+
+Tests failing?
+  → curl http://127.0.0.1:8000/v1/models
+  → ./llm_manager.sh status
+  → Check logs for errors
+
+Timeouts?
+  → Reduce concurrent: --concurrent 2
+  → Increase timeout: --timeout 300
+
+Resource issues?
+  → python3 resource_monitor.py
+  → nvidia-smi (check GPU)
+  → Reduce MAX_NUM_SEQS in llm_config.sh
+
+╔══════════════════════════════════════════════════════════════════════╗
+║             🎉 YOUR SERVICE IS READY FOR PRODUCTION! 🚀              ║
+╚══════════════════════════════════════════════════════════════════════╝
+
+Total Testing Time: ~10 minutes
+Total Tests Run: 75+ requests across all endpoints
+Resource Monitoring: GPU, VRAM, RAM, CPU tracked throughout
+
+Next Steps:
+  1. Save your test results
+  2. Set up monitoring in production
+  3. Configure CI/CD with these tests
+  4. Document your performance baselines
+
+For help: cat COMPLETE_TESTING_STEPS.md

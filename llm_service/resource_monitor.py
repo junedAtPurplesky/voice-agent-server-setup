@@ -51,6 +51,7 @@ class ResourceMonitor:
     def __init__(self):
         self.has_nvidia_smi = self._check_nvidia_smi()
         self.has_psutil = self._check_psutil()
+        self.in_container = self._check_container()
     
     def _check_nvidia_smi(self) -> bool:
         """Check if nvidia-smi is available"""
@@ -68,6 +69,20 @@ class ResourceMonitor:
             return True
         except ImportError:
             return False
+    
+    def _check_container(self) -> bool:
+        """Check if running inside a container"""
+        import os
+        # Check for Docker
+        if os.path.exists('/.dockerenv'):
+            return True
+        # Check for cgroup indicators
+        try:
+            with open('/proc/1/cgroup', 'r') as f:
+                return 'docker' in f.read() or 'lxc' in f.read()
+        except:
+            pass
+        return False
     
     def get_gpu_info(self) -> List[GPUInfo]:
         """Get GPU information using nvidia-smi"""
@@ -114,8 +129,83 @@ class ResourceMonitor:
         except Exception:
             return []
     
+    def _get_container_memory_limit(self) -> Optional[int]:
+        """Get container memory limit in bytes from cgroups"""
+        # Try cgroup v2 first
+        cgroup_v2_paths = [
+            '/sys/fs/cgroup/memory.max',
+            '/sys/fs/cgroup/memory/memory.max'
+        ]
+        for path in cgroup_v2_paths:
+            try:
+                with open(path, 'r') as f:
+                    limit = f.read().strip()
+                    if limit != 'max':
+                        return int(limit)
+            except:
+                continue
+        
+        # Try cgroup v1
+        cgroup_v1_paths = [
+            '/sys/fs/cgroup/memory/memory.limit_in_bytes',
+            '/sys/fs/cgroup/memory.limit_in_bytes'
+        ]
+        for path in cgroup_v1_paths:
+            try:
+                with open(path, 'r') as f:
+                    limit = int(f.read().strip())
+                    # Filter out "unlimited" values (usually very large numbers)
+                    if limit < (1 << 62):  # Reasonable upper bound
+                        return limit
+            except:
+                continue
+        
+        return None
+    
+    def _get_container_memory_usage(self) -> Optional[int]:
+        """Get container current memory usage in bytes from cgroups"""
+        # Try cgroup v2
+        cgroup_v2_paths = [
+            '/sys/fs/cgroup/memory.current',
+            '/sys/fs/cgroup/memory/memory.current'
+        ]
+        for path in cgroup_v2_paths:
+            try:
+                with open(path, 'r') as f:
+                    return int(f.read().strip())
+            except:
+                continue
+        
+        # Try cgroup v1
+        cgroup_v1_paths = [
+            '/sys/fs/cgroup/memory/memory.usage_in_bytes',
+            '/sys/fs/cgroup/memory.usage_in_bytes'
+        ]
+        for path in cgroup_v1_paths:
+            try:
+                with open(path, 'r') as f:
+                    return int(f.read().strip())
+            except:
+                continue
+        
+        return None
+    
     def get_ram_info(self) -> tuple:
         """Get RAM information"""
+        # If in container, try to get container limits first
+        if self.in_container:
+            try:
+                mem_limit = self._get_container_memory_limit()
+                mem_usage = self._get_container_memory_usage()
+                
+                if mem_limit and mem_usage:
+                    total_gb = mem_limit / (1024**3)
+                    used_gb = mem_usage / (1024**3)
+                    percent = (used_gb / total_gb * 100) if total_gb > 0 else 0
+                    return (used_gb, total_gb, percent)
+            except Exception:
+                pass
+        
         if self.has_psutil:
             try:
                 import psutil
@@ -183,18 +273,70 @@ class ResourceMonitor:
         # Ultimate fallback
         return (0.0, 0.0, 0.0)
     
+    def _get_container_cpu_quota(self) -> Optional[float]:
+        """Get container CPU quota (number of CPUs allocated)"""
+        quota = None
+        period = None
+        
+        # Try cgroup v2
+        try:
+            with open('/sys/fs/cgroup/cpu.max', 'r') as f:
+                parts = f.read().strip().split()
+                if parts[0] != 'max':
+                    quota = int(parts[0])
+                    period = int(parts[1]) if len(parts) > 1 else 100000
+        except:
+            pass
+        
+        # Try cgroup v1
+        if quota is None:
+            try:
+                with open('/sys/fs/cgroup/cpu/cpu.cfs_quota_us', 'r') as f:
+                    quota = int(f.read().strip())
+            except:
+                pass
+        
+        if period is None:
+            try:
+                with open('/sys/fs/cgroup/cpu/cpu.cfs_period_us', 'r') as f:
+                    period = int(f.read().strip())
+            except:
+                period = 100000  # Default
+        
+        if quota and quota > 0 and period > 0:
+            # Calculate number of CPUs
+            return quota / period
+        
+        return None
+    
     def get_cpu_info(self) -> tuple:
         """Get CPU information"""
+        cpu_count = None
+        
+        # If in container, try to get container CPU limit first
+        if self.in_container:
+            try:
+                container_cpus = self._get_container_cpu_quota()
+                if container_cpus:
+                    # Round to nearest integer, minimum 1
+                    cpu_count = max(1, round(container_cpus))
+            except Exception:
+                pass
+        
         if self.has_psutil:
             try:
                 import psutil
-                return (psutil.cpu_percent(interval=0.1), psutil.cpu_count())
+                percent = psutil.cpu_percent(interval=0.1)
+                if cpu_count is None:
+                    cpu_count = psutil.cpu_count()
+                return (percent, cpu_count)
             except Exception:
                 pass
         
         # Fallback
         import os
-        cpu_count = os.cpu_count() or 1
+        if cpu_count is None:
+            cpu_count = os.cpu_count() or 1
         return (0.0, cpu_count)
     
     def get_snapshot(self) -> SystemResources:
@@ -265,6 +407,7 @@ if __name__ == "__main__":
     
     print(f"nvidia-smi available: {monitor.has_nvidia_smi}")
     print(f"psutil available: {monitor.has_psutil}")
+    print(f"Running in container: {monitor.in_container}")
     print()
     
     resources = monitor.get_snapshot()
