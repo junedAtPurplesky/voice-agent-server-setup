@@ -68,11 +68,25 @@ class SynthesisEngine:
                 from cosyvoice.cli.cosyvoice import CosyVoice
                 from cosyvoice.utils.file_utils import load_wav
                 
-                self.model = CosyVoice(
-                    self.service_config.model_path,
-                    load_jit=True,
-                    load_onnx=False
-                )
+                # Try to initialize with load_onnx parameter first (newer versions)
+                try:
+                    self.model = CosyVoice(
+                        self.service_config.model_path,
+                        load_jit=True,
+                        load_onnx=False
+                    )
+                except TypeError:
+                    # If load_onnx is not supported, try without it (older versions)
+                    logger.info("load_onnx parameter not supported, trying without it")
+                    try:
+                        self.model = CosyVoice(
+                            self.service_config.model_path,
+                            load_jit=True
+                        )
+                    except TypeError:
+                        # If load_jit is also not supported, try with just the path
+                        logger.info("load_jit parameter not supported, trying with just model path")
+                        self.model = CosyVoice(self.service_config.model_path)
                 
                 # Move model to device
                 if self.service_config.device == "cuda":
