@@ -10,20 +10,20 @@
 # -------------------------------
 
 # Model Settings
-MODEL_NAME="Qwen/Qwen2.5-0.5B-Instruct-AWQ"
+MODEL_NAME="Qwen/Qwen2.5-7B-Instruct-AWQ"
 HOST="0.0.0.0"
 PORT="8000"
 
 # Performance Settings
 QUANTIZATION="awq"
-GPU_MEMORY_UTILIZATION="0.6"
-TENSOR_PARALLEL_SIZE="1"
-MAX_NUM_SEQS="1"
-SWAP_SPACE="1"
+# GPU_MEMORY_UTILIZATION="0.6"
+# TENSOR_PARALLEL_SIZE="1"
+# MAX_NUM_SEQS="1"
+# SWAP_SPACE="1"
 
 # Optional Flags (set to empty string "" to disable)
-ENFORCE_EAGER="--enforce-eager"
-DISABLE_LOG_STATS="--disable-log-stats"
+# ENFORCE_EAGER="--enforce-eager"
+# DISABLE_LOG_STATS="--disable-log-stats"
 
 # -------------------------------
 # ALL SUPPORTED FLAGS (Reference)
@@ -112,8 +112,8 @@ DISABLE_LOG_STATS="--disable-log-stats"
 # LIMIT_MM_PER_PROMPT=""                 # Limit multimodal items per prompt
 
 ## Tool/Function Calling
-# ENABLE_AUTO_TOOL_CHOICE=""             # --enable-auto-tool-choice
-# TOOL_CALL_PARSER=""                    # Tool call parser
+ENABLE_AUTO_TOOL_CHOICE="--enable-auto-tool-choice"  # Enable auto tool choice
+TOOL_CALL_PARSER="hermes"                            # Tool call parser: hermes, etc.
 
 ## Guided Decoding
 # GUIDED_DECODING_BACKEND="outlines"     # Backend for guided decoding: outlines, lm-format-enforcer

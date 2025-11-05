@@ -102,6 +102,10 @@ start_llm() {
   [ -n "$ENABLE_LORA" ] && CMD="$CMD $ENABLE_LORA"
   [ -n "$ENABLE_CHUNKED_PREFILL" ] && CMD="$CMD $ENABLE_CHUNKED_PREFILL"
   
+  # Tool/Function calling
+  [ -n "$ENABLE_AUTO_TOOL_CHOICE" ] && CMD="$CMD $ENABLE_AUTO_TOOL_CHOICE"
+  [ -n "$TOOL_CALL_PARSER" ] && CMD="$CMD --tool-call-parser $TOOL_CALL_PARSER"
+  
   # Add extra custom flags
   [ -n "$EXTRA_FLAGS" ] && CMD="$CMD $EXTRA_FLAGS"
 
