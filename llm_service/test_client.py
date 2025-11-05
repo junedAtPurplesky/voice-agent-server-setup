@@ -51,6 +51,13 @@ def ensure_venv():
 # Ensure dependencies are available
 ensure_venv()
 
+# Import resource monitor
+try:
+    from resource_monitor import ResourceMonitor
+    HAS_RESOURCE_MONITOR = True
+except ImportError:
+    HAS_RESOURCE_MONITOR = False
+
 
 @dataclass
 class TestResult:
@@ -65,9 +72,10 @@ class TestResult:
 class LLMTestClient:
     """Comprehensive test client for LLM service"""
     
-    def __init__(self, base_url: str = "http://127.0.0.1:8000", timeout: float = 60.0):
+    def __init__(self, base_url: str = "http://127.0.0.1:8000", timeout: float = 60.0, model: str = None):
         self.base_url = base_url.rstrip('/')
         self.timeout = timeout
+        self.model = model  # Will be auto-detected if None
         self.results: List[TestResult] = []
         
     async def test_health(self) -> bool:
@@ -83,6 +91,12 @@ class LLMTestClient:
                     models = response.json()
                     print(f"✅ Service is healthy (Response time: {elapsed:.3f}s)")
                     print(f"📋 Available models: {json.dumps(models, indent=2)}")
+                    
+                    # Auto-detect model name if not set
+                    if self.model is None and 'data' in models and len(models['data']) > 0:
+                        self.model = models['data'][0]['id']
+                        print(f"🎯 Using model: {self.model}")
+                    
                     return True
                 else:
                     print(f"❌ Health check failed: {response.status_code}")
@@ -94,10 +108,14 @@ class LLMTestClient:
     async def test_completion(self, prompt: str = "Hello, how are you?", 
                              max_tokens: int = 50) -> TestResult:
         """Test basic completion endpoint"""
+        # Ensure we have a model name
+        if self.model is None:
+            await self.test_health()
+        
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 payload = {
-                    "model": "default",
+                    "model": self.model,
                     "prompt": prompt,
                     "max_tokens": max_tokens,
                     "temperature": 0.7,
@@ -137,11 +155,16 @@ class LLMTestClient:
     async def test_chat_completion(self, message: str = "What is AI?",
                                    max_tokens: int = 100) -> TestResult:
         """Test chat completion endpoint"""
+        # Ensure we have a model name
+        if self.model is None:
+            await self.test_health()
+        
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 payload = {
-                    "model": "default",
+                    "model": self.model,
                     "messages": [
+                        {"role": "system", "content": "You are a helpful assistant."},
                         {"role": "user", "content": message}
                     ],
                     "max_tokens": max_tokens,
@@ -182,10 +205,14 @@ class LLMTestClient:
     async def test_streaming(self, prompt: str = "Write a short story about AI.",
                             max_tokens: int = 200) -> TestResult:
         """Test streaming completion"""
+        # Ensure we have a model name
+        if self.model is None:
+            await self.test_health()
+        
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 payload = {
-                    "model": "default",
+                    "model": self.model,
                     "prompt": prompt,
                     "max_tokens": max_tokens,
                     "temperature": 0.7,
@@ -349,9 +376,16 @@ class LLMTestClient:
         print("\n" + "="*60)
 
 
-async def run_all_tests(base_url: str, num_requests: int, concurrent: int):
+async def run_all_tests(base_url: str, num_requests: int, concurrent: int, model: str = None):
     """Run all test suites"""
-    client = LLMTestClient(base_url=base_url)
+    # Initialize resource monitor
+    if HAS_RESOURCE_MONITOR:
+        monitor = ResourceMonitor()
+        print("\n📊 Initial System Resources:")
+        resources = monitor.get_snapshot()
+        monitor.print_resources(resources, prefix="  ")
+    
+    client = LLMTestClient(base_url=base_url, model=model)
     
     # Health check
     if not await client.test_health():
@@ -400,11 +434,23 @@ async def run_all_tests(base_url: str, num_requests: int, concurrent: int):
     
     # Performance test
     print("\n4️⃣  Running Performance Test...")
+    
+    # Show resources before load test
+    if HAS_RESOURCE_MONITOR:
+        print("\n📊 Resources before load test:")
+        monitor.print_compact(monitor.get_snapshot())
+    
     metrics = await client.run_performance_test(
         num_requests=num_requests,
         concurrent=concurrent
     )
     client.print_metrics(metrics)
+    
+    # Show final resources
+    if HAS_RESOURCE_MONITOR:
+        print("\n📊 Final System Resources:")
+        resources = monitor.get_snapshot()
+        monitor.print_resources(resources, prefix="  ")
 
 
 def main():
@@ -415,6 +461,11 @@ def main():
         "--url",
         default="http://127.0.0.1:8000",
         help="Base URL of LLM service (default: http://127.0.0.1:8000)"
+    )
+    parser.add_argument(
+        "--model",
+        default=None,
+        help="Model name (auto-detected if not specified)"
     )
     parser.add_argument(
         "--requests",
@@ -432,7 +483,7 @@ def main():
     args = parser.parse_args()
     
     try:
-        asyncio.run(run_all_tests(args.url, args.requests, args.concurrent))
+        asyncio.run(run_all_tests(args.url, args.requests, args.concurrent, args.model))
     except KeyboardInterrupt:
         print("\n\n⚠️  Tests interrupted by user")
     except Exception as e:

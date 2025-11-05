@@ -38,6 +38,74 @@ print_info() {
     echo -e "${YELLOW}ℹ $1${NC}"
 }
 
+print_resources() {
+    echo -e "${BLUE}======================================"
+    echo "📊 SYSTEM RESOURCES"
+    echo -e "======================================${NC}"
+    
+    # Check if nvidia-smi is available for GPU
+    if command -v nvidia-smi &> /dev/null; then
+        echo -e "${GREEN}🎮 GPU:${NC}"
+        nvidia-smi --query-gpu=index,name,memory.used,memory.total,utilization.gpu,temperature.gpu \
+            --format=csv,noheader | while IFS=',' read -r idx name mem_used mem_total util temp; do
+            mem_used=$(echo $mem_used | xargs)
+            mem_total=$(echo $mem_total | xargs)
+            util=$(echo $util | xargs)
+            temp=$(echo $temp | xargs)
+            mem_percent=$(echo "scale=1; ($mem_used / $mem_total) * 100" | bc 2>/dev/null || echo "0")
+            echo "   GPU $idx ($name)"
+            echo "     VRAM: ${mem_used} MB / ${mem_total} MB (${mem_percent}%)"
+            echo "     Utilization: ${util}%, Temp: ${temp}°C"
+        done
+    else
+        echo -e "${YELLOW}🎮 GPU: Not available (nvidia-smi not found)${NC}"
+    fi
+    
+    # RAM info
+    echo -e "${GREEN}💾 RAM:${NC}"
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        # macOS
+        total_mem=$(sysctl -n hw.memsize | awk '{print $1/1024/1024/1024}')
+        vm_stat_output=$(vm_stat)
+        pages_active=$(echo "$vm_stat_output" | grep "Pages active" | awk '{print $3}' | tr -d '.')
+        pages_wired=$(echo "$vm_stat_output" | grep "Pages wired down" | awk '{print $4}' | tr -d '.')
+        page_size=4096
+        used_mem=$(echo "scale=2; (($pages_active + $pages_wired) * $page_size) / 1024 / 1024 / 1024" | bc)
+        mem_percent=$(echo "scale=1; ($used_mem / $total_mem) * 100" | bc)
+        printf "   %.2f GB / %.2f GB (%.1f%%)\n" $used_mem $total_mem $mem_percent
+    elif [[ -f /proc/meminfo ]]; then
+        # Linux
+        total_mem=$(grep MemTotal /proc/meminfo | awk '{print $2/1024/1024}')
+        avail_mem=$(grep MemAvailable /proc/meminfo | awk '{print $2/1024/1024}')
+        used_mem=$(echo "$total_mem - $avail_mem" | bc)
+        mem_percent=$(echo "scale=1; ($used_mem / $total_mem) * 100" | bc)
+        printf "   %.2f GB / %.2f GB (%.1f%%)\n" $used_mem $total_mem $mem_percent
+    fi
+    
+    # CPU info
+    echo -e "${GREEN}⚙️  CPU:${NC}"
+    if command -v top &> /dev/null; then
+        if [[ "$OSTYPE" == "darwin"* ]]; then
+            # macOS
+            cpu_usage=$(top -l 1 | grep "CPU usage" | awk '{print $3}' | tr -d '%')
+            cpu_count=$(sysctl -n hw.ncpu)
+            echo "   ${cpu_usage}% (${cpu_count} cores)"
+        elif command -v mpstat &> /dev/null; then
+            # Linux with mpstat
+            cpu_usage=$(mpstat 1 1 | tail -1 | awk '{print 100-$NF}')
+            cpu_count=$(nproc)
+            echo "   ${cpu_usage}% (${cpu_count} cores)"
+        else
+            # Linux fallback
+            cpu_count=$(nproc 2>/dev/null || echo "N/A")
+            echo "   ${cpu_count} cores"
+        fi
+    fi
+    
+    echo -e "${BLUE}======================================${NC}"
+    echo ""
+}
+
 # -------------------------------
 # Test Functions
 # -------------------------------
@@ -65,6 +133,13 @@ test_completion() {
     local prompt="${1:-What is AI?}"
     local max_tokens="${2:-50}"
     
+    # Get model name from service
+    local model_name=$(curl -s "$LLM_URL/v1/models" | jq -r '.data[0].id' 2>/dev/null)
+    if [ -z "$model_name" ] || [ "$model_name" = "null" ]; then
+        model_name="model"
+    fi
+    
+    print_info "Model: $model_name"
     print_info "Prompt: $prompt"
     print_info "Max tokens: $max_tokens"
     
@@ -74,7 +149,7 @@ test_completion() {
         -X POST "$LLM_URL/v1/completions" \
         -H "Content-Type: application/json" \
         -d "{
-            \"model\": \"default\",
+            \"model\": \"$model_name\",
             \"prompt\": \"$prompt\",
             \"max_tokens\": $max_tokens,
             \"temperature\": 0.7
@@ -120,6 +195,13 @@ test_streaming() {
     local prompt="${1:-Tell me a short story.}"
     local max_tokens="${2:-100}"
     
+    # Get model name from service
+    local model_name=$(curl -s "$LLM_URL/v1/models" | jq -r '.data[0].id' 2>/dev/null)
+    if [ -z "$model_name" ] || [ "$model_name" = "null" ]; then
+        model_name="model"
+    fi
+    
+    print_info "Model: $model_name"
     print_info "Prompt: $prompt"
     print_info "Max tokens: $max_tokens"
     echo ""
@@ -131,7 +213,7 @@ test_streaming() {
         -X POST "$LLM_URL/v1/completions" \
         -H "Content-Type: application/json" \
         -d "{
-            \"model\": \"default\",
+            \"model\": \"$model_name\",
             \"prompt\": \"$prompt\",
             \"max_tokens\": $max_tokens,
             \"temperature\": 0.7,
@@ -160,6 +242,13 @@ test_chat() {
     local message="${1:-Explain machine learning briefly.}"
     local max_tokens="${2:-100}"
     
+    # Get model name from service
+    local model_name=$(curl -s "$LLM_URL/v1/models" | jq -r '.data[0].id' 2>/dev/null)
+    if [ -z "$model_name" ] || [ "$model_name" = "null" ]; then
+        model_name="model"
+    fi
+    
+    print_info "Model: $model_name"
     print_info "Message: $message"
     print_info "Max tokens: $max_tokens"
     
@@ -169,8 +258,9 @@ test_chat() {
         -X POST "$LLM_URL/v1/chat/completions" \
         -H "Content-Type: application/json" \
         -d "{
-            \"model\": \"default\",
+            \"model\": \"$model_name\",
             \"messages\": [
+                {\"role\": \"system\", \"content\": \"You are a helpful assistant.\"},
                 {\"role\": \"user\", \"content\": \"$message\"}
             ],
             \"max_tokens\": $max_tokens,
@@ -215,6 +305,9 @@ run_quick_test() {
     print_header "Running Quick Test Suite"
     echo ""
     
+    # Show initial system resources
+    print_resources
+    
     local passed=0
     local failed=0
     
@@ -247,6 +340,10 @@ run_quick_test() {
     fi
     
     echo ""
+    
+    # Show final system resources
+    print_resources
+    
     print_header "Test Summary"
     echo "Passed: $passed"
     echo "Failed: $failed"

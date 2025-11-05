@@ -50,6 +50,13 @@ def ensure_venv():
 # Ensure dependencies are available
 ensure_venv()
 
+# Import resource monitor
+try:
+    from resource_monitor import ResourceMonitor
+    HAS_RESOURCE_MONITOR = True
+except ImportError:
+    HAS_RESOURCE_MONITOR = False
+
 
 @dataclass
 class StreamMetrics:
@@ -76,20 +83,41 @@ class StreamMetrics:
 class StreamingTestClient:
     """Test client focused on streaming capabilities"""
     
-    def __init__(self, base_url: str = "http://127.0.0.1:8000", timeout: float = 120.0):
+    def __init__(self, base_url: str = "http://127.0.0.1:8000", timeout: float = 120.0, model: str = None):
         self.base_url = base_url.rstrip('/')
         self.timeout = timeout
+        self.model = model  # Will be auto-detected if None
+    
+    async def get_model_name(self) -> str:
+        """Get model name from service"""
+        if self.model is not None:
+            return self.model
+        
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.get(f"{self.base_url}/v1/models")
+                if response.status_code == 200:
+                    models = response.json()
+                    if 'data' in models and len(models['data']) > 0:
+                        self.model = models['data'][0]['id']
+                        return self.model
+        except Exception:
+            pass
+        
+        # Fallback
+        return "model"
     
     async def test_stream_completion(self, prompt: str, max_tokens: int = 200,
                                     temperature: float = 0.7,
                                     verbose: bool = False) -> StreamMetrics:
         """Test streaming completion with detailed metrics"""
         metrics = StreamMetrics()
+        model_name = await self.get_model_name()
         
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 payload = {
-                    "model": "default",
+                    "model": model_name,
                     "prompt": prompt,
                     "max_tokens": max_tokens,
                     "temperature": temperature,
@@ -176,12 +204,14 @@ class StreamingTestClient:
                               verbose: bool = False) -> StreamMetrics:
         """Test streaming chat completion"""
         metrics = StreamMetrics()
+        model_name = await self.get_model_name()
         
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 payload = {
-                    "model": "default",
+                    "model": model_name,
                     "messages": [
+                        {"role": "system", "content": "You are a helpful assistant."},
                         {"role": "user", "content": message}
                     ],
                     "max_tokens": max_tokens,
@@ -344,6 +374,11 @@ async def main():
         help="Base URL of LLM service"
     )
     parser.add_argument(
+        "--model",
+        default=None,
+        help="Model name (auto-detected if not specified)"
+    )
+    parser.add_argument(
         "--max-tokens",
         type=int,
         default=200,
@@ -367,7 +402,14 @@ async def main():
     
     args = parser.parse_args()
     
-    client = StreamingTestClient(base_url=args.url)
+    # Show initial resources
+    if HAS_RESOURCE_MONITOR:
+        monitor = ResourceMonitor()
+        print("\n📊 Initial System Resources:")
+        resources = monitor.get_snapshot()
+        monitor.print_resources(resources, prefix="  ")
+    
+    client = StreamingTestClient(base_url=args.url, model=args.model)
     
     print("="*60)
     print("🌊 LLM STREAMING TEST CLIENT")
@@ -399,6 +441,12 @@ async def main():
         )
         
         client.print_summary(results)
+    
+    # Show final resources
+    if HAS_RESOURCE_MONITOR:
+        print("\n📊 Final System Resources:")
+        resources = monitor.get_snapshot()
+        monitor.print_resources(resources, prefix="  ")
 
 
 if __name__ == "__main__":

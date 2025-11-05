@@ -109,10 +109,19 @@ python3 load_test.py --requests 100 # Load tests
 
 | Client | Purpose | Key Features |
 |--------|---------|--------------|
-| `test_llm.sh` | Quick shell tests | No dependencies, fast health checks |
-| `test_client.py` | Comprehensive testing | All endpoints, metrics, concurrency |
-| `test_stream.py` | Streaming focus | Time to first token, chunk analysis |
-| `load_test.py` | Load & performance | High volume, latency metrics (P95, P99) |
+| `test_llm.sh` | Quick shell tests | No dependencies, fast health checks, resource monitoring |
+| `test_client.py` | Comprehensive testing | All endpoints, metrics, concurrency, resource tracking |
+| `test_stream.py` | Streaming focus | Time to first token, chunk analysis, resource monitoring |
+| `load_test.py` | Load & performance | High volume, latency metrics (P95, P99), resource tracking |
+
+### 📊 Resource Monitoring
+
+All test clients now display system resources:
+- **🎮 GPU/VRAM**: Memory usage, utilization, temperature
+- **💾 RAM**: System memory usage and available
+- **⚙️ CPU**: Utilization and core count
+
+See [RESOURCE_MONITORING.md](RESOURCE_MONITORING.md) for details.
 
 **Example outputs:**
 ```bash

@@ -12,6 +12,9 @@ __pycache__/
 *.log
 *.out
 
+# Test scripts (temporary)
+.test_*.sh
+
 # IDE
 .vscode/
 .idea/

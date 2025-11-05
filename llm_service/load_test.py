@@ -51,6 +51,13 @@ def ensure_venv():
 # Ensure dependencies are available
 ensure_venv()
 
+# Import resource monitor
+try:
+    from resource_monitor import ResourceMonitor
+    HAS_RESOURCE_MONITOR = True
+except ImportError:
+    HAS_RESOURCE_MONITOR = False
+
 
 @dataclass
 class LoadTestResult:
@@ -79,12 +86,32 @@ class LoadTestConfig:
 class LoadTester:
     """Load testing client for LLM service"""
     
-    def __init__(self, base_url: str = "http://127.0.0.1:8000", timeout: float = 120.0):
+    def __init__(self, base_url: str = "http://127.0.0.1:8000", timeout: float = 120.0, model: str = None):
         self.base_url = base_url.rstrip('/')
         self.timeout = timeout
+        self.model = model  # Will be auto-detected if None
         self.results: List[LoadTestResult] = []
         self.start_time: float = 0.0
         self.end_time: float = 0.0
+    
+    async def get_model_name(self) -> str:
+        """Get model name from service"""
+        if self.model is not None:
+            return self.model
+        
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.get(f"{self.base_url}/v1/models")
+                if response.status_code == 200:
+                    models = response.json()
+                    if 'data' in models and len(models['data']) > 0:
+                        self.model = models['data'][0]['id']
+                        return self.model
+        except Exception:
+            pass
+        
+        # Fallback
+        return "model"
     
     async def send_request(self, request_id: int, prompt: str,
                           max_tokens: int, temperature: float,
@@ -97,10 +124,12 @@ class LoadTester:
             timestamp=time.time()
         )
         
+        model_name = await self.get_model_name()
+        
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 payload = {
-                    "model": "default",
+                    "model": model_name,
                     "prompt": prompt,
                     "max_tokens": max_tokens,
                     "temperature": temperature,
@@ -186,6 +215,13 @@ class LoadTester:
         print(f"Streaming:            {config.use_streaming}")
         print(f"{'='*70}\n")
         
+        # Show initial resources
+        if HAS_RESOURCE_MONITOR:
+            monitor = ResourceMonitor()
+            print("📊 Initial Resources:")
+            monitor.print_compact(monitor.get_snapshot())
+            print()
+        
         self.results = []
         self.start_time = time.time()
         
@@ -222,6 +258,12 @@ class LoadTester:
                 await asyncio.sleep(ramp_delay)
         
         self.end_time = time.time()
+        
+        # Show resource usage during test
+        if HAS_RESOURCE_MONITOR:
+            print(f"\n📊 Resources after load test:")
+            monitor.print_compact(monitor.get_snapshot())
+            print()
         
         return self.analyze_results()
     
@@ -362,6 +404,11 @@ async def main():
         help="Base URL of LLM service"
     )
     parser.add_argument(
+        "--model",
+        default=None,
+        help="Model name (auto-detected if not specified)"
+    )
+    parser.add_argument(
         "--requests",
         type=int,
         default=100,
@@ -413,11 +460,24 @@ async def main():
         use_streaming=args.stream
     )
     
-    tester = LoadTester(base_url=args.url, timeout=args.timeout)
+    tester = LoadTester(base_url=args.url, timeout=args.timeout, model=args.model)
+    
+    # Show system resources before test
+    if HAS_RESOURCE_MONITOR:
+        monitor = ResourceMonitor()
+        print("\n📊 System Resources Before Test:")
+        resources = monitor.get_snapshot()
+        monitor.print_resources(resources, prefix="  ")
     
     try:
         metrics = await tester.run_load_test(config)
         tester.print_report(metrics)
+        
+        # Show final resources
+        if HAS_RESOURCE_MONITOR:
+            print("\n📊 Final System Resources:")
+            resources = monitor.get_snapshot()
+            monitor.print_resources(resources, prefix="  ")
     except KeyboardInterrupt:
         print("\n\n⚠️  Load test interrupted by user")
         if tester.results:
