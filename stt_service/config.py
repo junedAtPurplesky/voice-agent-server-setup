@@ -10,7 +10,7 @@ import torch
 
 class ServiceConfig(BaseModel):
     """Server-level configuration"""
-    model_name: str = "small"  # Use "large-v3" for RunPod production
+    model_name: str = "large-v3"  # Use "large-v3" for RunPod production
     device: str = "cuda" if torch.cuda.is_available() else "cpu"
     compute_type: str = "float16" if torch.cuda.is_available() else "int8"
     host: str = "0.0.0.0"
