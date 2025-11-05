@@ -2,28 +2,41 @@
 
 ## Latest Updates
 
-### 🔧 Auto-Accept Conda TOS (Latest Fix)
+### 🔧 Smart Conda Detection (Latest Fix)
 
 **Date:** November 2024
 
 **What's Fixed:**
+- ✅ **Smart Existing Installation Detection** - Handles existing Miniconda installations
 - ✅ **Automatic TOS Acceptance** - Fixes "Terms of Service have not been accepted" error
-- The `setup.sh` script now automatically accepts Conda/Anaconda Terms of Service
+- ✅ **PATH Management** - Automatically adds existing Conda to PATH if needed
 - No manual interaction required during setup
-- Works with both old and new Conda versions
 
 **Technical Details:**
 The script now:
-1. Configures Conda settings for non-interactive use
-2. Detects if `conda tos` command is available
-3. Automatically accepts TOS for `pkgs/main` and `pkgs/r` channels
-4. Falls back gracefully for older Conda versions
+1. Checks if conda command is available in PATH
+2. If not, checks if Miniconda is already installed at `$HOME/miniconda3`
+3. If existing installation found:
+   - Adds it to PATH for the current session
+   - Re-initializes conda for bash
+   - Sources conda setup scripts
+4. If no installation found, proceeds with fresh install
+5. Configures Conda settings for non-interactive use
+6. Detects if `conda tos` command is available
+7. Automatically accepts TOS for `pkgs/main` and `pkgs/r` channels
+
+**Fixed Issues:**
+- "File or directory already exists: '/root/miniconda3'" error
+- "CondaToSNonInteractiveError: Terms of Service have not been accepted" error
+- Conda command not available in PATH after installation
 
 **Migration:**
-If you encountered the TOS error, just re-run:
+Just re-run the setup script:
 ```bash
 ./setup.sh
 ```
+
+The script will automatically detect and use your existing Conda installation!
 
 ---
 
