@@ -6,7 +6,7 @@ High-performance text-to-speech with streaming support
 
 import time
 import logging
-from typing import Dict, Any, Optional, Iterator
+from typing import Dict, Any, Optional, Iterator, List
 import numpy as np
 import torch
 
@@ -63,36 +63,46 @@ class SynthesisEngine:
             logger.info(f"Model path: {self.service_config.model_path}")
             logger.info(f"Device: {self.service_config.device}")
             
-            # Import CosyVoice2 model
+            # Import CosyVoice model
             try:
                 from cosyvoice.cli.cosyvoice import CosyVoice
                 from cosyvoice.utils.file_utils import load_wav
                 
-                # Try to initialize with load_onnx parameter first (newer versions)
+                # Initialize CosyVoice with correct parameters
+                # Official docs: https://github.com/FunAudioLLM/CosyVoice
+                # Parameters: load_jit (JIT compilation), load_trt (TensorRT), fp16 (precision)
+                logger.info("Initializing CosyVoice model...")
+                
                 try:
+                    # Try with all parameters (newer versions)
                     self.model = CosyVoice(
                         self.service_config.model_path,
-                        load_jit=True,
-                        load_onnx=False
+                        load_jit=False,  # Set to False for faster loading
+                        load_trt=False,  # TensorRT optimization (requires TensorRT)
+                        fp16=False       # Use FP32 for better quality
                     )
-                except TypeError:
-                    # If load_onnx is not supported, try without it (older versions)
-                    logger.info("load_onnx parameter not supported, trying without it")
+                    logger.info("Loaded CosyVoice with full parameters")
+                except TypeError as e:
+                    logger.info(f"Full parameter initialization failed: {e}")
+                    # Try without optional parameters
                     try:
                         self.model = CosyVoice(
                             self.service_config.model_path,
-                            load_jit=True
+                            load_jit=False
                         )
+                        logger.info("Loaded CosyVoice with load_jit parameter only")
                     except TypeError:
-                        # If load_jit is also not supported, try with just the path
-                        logger.info("load_jit parameter not supported, trying with just model path")
+                        # Fallback to just model path (oldest versions)
+                        logger.info("Trying with model path only")
                         self.model = CosyVoice(self.service_config.model_path)
+                        logger.info("Loaded CosyVoice with model path only")
                 
                 # Move model to device
                 if self.service_config.device == "cuda":
+                    logger.info("Moving model to CUDA...")
                     self.model = self.model.to("cuda")
                 
-                logger.info("CosyVoice2 model loaded successfully")
+                logger.info("CosyVoice model loaded successfully!")
                 
                 # Get available speakers
                 self._load_available_speakers()
@@ -101,8 +111,10 @@ class SynthesisEngine:
                 self._warmup()
                 
             except ImportError as e:
-                logger.error(f"Failed to import CosyVoice2: {e}")
-                logger.error("Installing CosyVoice2 from GitHub...")
+                logger.error(f"Failed to import CosyVoice: {e}")
+                logger.warning("CosyVoice not installed. Install it with:")
+                logger.warning("  git clone https://github.com/FunAudioLLM/CosyVoice.git")
+                logger.warning("  cd CosyVoice && pip install -r requirements.txt")
                 self._fallback_to_basic_tts()
                 
         except Exception as e:
