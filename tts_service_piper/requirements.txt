@@ -1,0 +1,24 @@
+# Piper TTS Service Requirements
+# Lightweight TTS with Hindi and English support
+
+# Web Framework
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+python-multipart==0.0.6
+websockets==12.0
+
+# Data Validation
+pydantic==2.5.3
+
+# Audio Processing
+numpy==1.24.3
+
+# TTS Engine
+piper-tts==1.2.0
+
+# ONNX Runtime (CPU version - for GPU, see requirements-gpu.txt)
+onnxruntime==1.16.3
+
+# Utilities
+requests==2.31.0
+

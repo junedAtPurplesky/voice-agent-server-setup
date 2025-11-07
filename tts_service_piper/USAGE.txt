@@ -1,0 +1,231 @@
+================================================================================
+PIPER TTS SERVICE - QUICK START GUIDE
+================================================================================
+
+A lightweight TTS service using Piper with Hindi and English support.
+Uses Python venv to avoid conflicts with other services.
+
+================================================================================
+INSTALLATION
+================================================================================
+
+1. Run setup script (CPU version - recommended for most users):
+   ./setup.sh
+
+   This will:
+   - Create Python virtual environment (venv)
+   - Install all dependencies (CPU version)
+   - Create models directory
+   - Download default voice models (optional)
+
+2. For GPU acceleration (optional, requires NVIDIA GPU + CUDA):
+   See GPU_SETUP.txt for detailed instructions
+   
+   Quick GPU setup:
+   - Edit config.py: set use_gpu = True
+   - Install GPU requirements: pip install -r requirements-gpu.txt
+   - Restart service
+   
+   Note: GPU provides 20-40% speedup. CPU is already very fast!
+
+================================================================================
+STARTING THE SERVICE
+================================================================================
+
+1. Start the service:
+   ./start_service.sh
+
+2. Service will run on: http://localhost:8003
+
+3. Check service status:
+   ./tts_manager.sh status
+
+================================================================================
+STOPPING THE SERVICE
+================================================================================
+
+1. Stop the service:
+   ./stop_service.sh
+
+   OR
+
+   ./tts_manager.sh stop
+
+================================================================================
+TESTING
+================================================================================
+
+1. Run test suite:
+   python test_client.py
+
+2. Run integration examples:
+   python integration_example.py
+
+3. Manual test:
+   curl http://localhost:8003/health
+   curl http://localhost:8003/voices
+
+================================================================================
+AVAILABLE VOICES
+================================================================================
+
+ENGLISH VOICES:
+  - en_US-lessac-medium (US Male, Medium Quality)
+  - en_US-amy-medium (US Female, Medium Quality)
+  - en_US-libritts-high (US Neutral, High Quality)
+  - en_GB-alan-medium (GB Male, Medium Quality)
+
+HINDI VOICES:
+  - hi_IN-madhur-medium (India Male, Medium Quality)
+  - hi_IN-female-medium (India Female, Medium Quality)
+
+Note: Voice models are automatically downloaded on first use (~10-50MB each)
+
+================================================================================
+API ENDPOINTS
+================================================================================
+
+1. Health Check:
+   GET http://localhost:8003/health
+
+2. List Available Voices:
+   GET http://localhost:8003/voices
+
+3. Synthesize Text (HTTP):
+   POST http://localhost:8003/synthesize
+   Body: {
+     "text": "Your text here",
+     "voice_config": {
+       "voice_model": "en_US-lessac-medium",
+       "language": "en",
+       "speed": 1.0,
+       "volume": 1.0
+     }
+   }
+
+4. WebSocket Streaming:
+   WS ws://localhost:8003/stream
+
+================================================================================
+CLIENT CONFIGURATION
+================================================================================
+
+Voice configuration (client-side configurable):
+  - voice_model: Voice ID (e.g., "en_US-lessac-medium", "hi_IN-madhur-medium")
+  - language: "en" or "hi"
+  - speed: 0.5 to 2.0 (default: 1.0)
+  - volume: 0.1 to 2.0 (default: 1.0)
+
+Audio configuration:
+  - sample_rate: 22050 (Piper default)
+  - channels: 1 (mono) or 2 (stereo)
+  - encoding: "pcm_s16le", "pcm_f32le", "wav"
+
+================================================================================
+SERVICE MANAGEMENT
+================================================================================
+
+Using tts_manager.sh:
+  ./tts_manager.sh start    - Start the service
+  ./tts_manager.sh stop     - Stop the service
+  ./tts_manager.sh restart  - Restart the service
+  ./tts_manager.sh status   - Check service status
+  ./tts_manager.sh logs     - View service logs
+  ./tts_manager.sh test     - Run test suite
+
+================================================================================
+LOGS
+================================================================================
+
+View logs:
+  tail -f tts_service.log
+
+Log file location:
+  tts_service_piper/tts_service.log
+
+================================================================================
+DIRECTORY STRUCTURE
+================================================================================
+
+tts_service_piper/
+  ├── config.py              - Configuration models
+  ├── synthesis.py           - Piper synthesis engine
+  ├── tts_server.py          - FastAPI server
+  ├── text_processor.py      - Text processing utilities
+  ├── audio_utils.py         - Audio conversion utilities
+  ├── requirements.txt       - Python dependencies
+  ├── setup.sh               - Setup script
+  ├── start_service.sh       - Start service
+  ├── stop_service.sh        - Stop service
+  ├── tts_manager.sh         - Service manager
+  ├── test_client.py         - Test client
+  ├── integration_example.py - Integration examples
+  ├── venv/                  - Virtual environment (created by setup)
+  └── piper_models/          - Voice models (auto-downloaded)
+
+================================================================================
+DIFFERENCES FROM CosyVoice TTS SERVICE
+================================================================================
+
+1. Port: 8003 (vs 8002 for CosyVoice)
+2. Engine: Piper (lighter, faster startup)
+3. Environment: Python venv (vs conda)
+4. Sample Rate: 22050 Hz (vs 24000 Hz)
+5. Models: ONNX models (~10-50MB each vs ~1GB)
+6. Languages: Optimized for Hindi and English
+
+================================================================================
+TROUBLESHOOTING
+================================================================================
+
+1. Service won't start:
+   - Check logs: cat tts_service.log
+   - Verify venv: source venv/bin/activate && python --version
+   - Reinstall: rm -rf venv && ./setup.sh
+
+2. Voice models not downloading:
+   - Manual download from: https://huggingface.co/rhasspy/piper-voices
+   - Place .onnx and .onnx.json files in piper_models/
+
+3. Import errors:
+   - Activate venv: source venv/bin/activate
+   - Reinstall deps: pip install -r requirements.txt
+
+4. Port already in use:
+   - Change port in config.py (SERVICE_CONFIG.port)
+   - Or stop conflicting service
+
+================================================================================
+EXAMPLE USAGE (Python)
+================================================================================
+
+HTTP API:
+  import requests
+  
+  response = requests.post(
+      "http://localhost:8003/synthesize",
+      json={
+          "text": "Hello world",
+          "voice_config": {
+              "voice_model": "en_US-lessac-medium",
+              "language": "en"
+          }
+      }
+  )
+  
+  audio_base64 = response.json()["audio_base64"]
+
+WebSocket Streaming:
+  See integration_example.py for complete examples
+
+================================================================================
+SUPPORT
+================================================================================
+
+For issues or questions, check:
+  - Service logs: tts_service.log
+  - Test results: python test_client.py
+  - Piper documentation: https://github.com/rhasspy/piper
+
+================================================================================
+
