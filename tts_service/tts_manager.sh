@@ -126,6 +126,59 @@ show_logs() {
     fi
 }
 
+verify_model() {
+    echo "Verifying model integrity..."
+    echo ""
+    
+    # Check if conda is available
+    if command -v conda &> /dev/null; then
+        CONDA_BASE=$(conda info --base)
+        source "${CONDA_BASE}/etc/profile.d/conda.sh"
+        conda activate cosyvoice 2>/dev/null || true
+    fi
+    
+    # Run verification
+    if [ -f "download_model.py" ]; then
+        python download_model.py --verify-only
+    else
+        echo "Error: download_model.py not found"
+        exit 1
+    fi
+}
+
+repair_model() {
+    echo "Repairing model (force re-download)..."
+    echo ""
+    
+    # Check if conda is available
+    if command -v conda &> /dev/null; then
+        CONDA_BASE=$(conda info --base)
+        source "${CONDA_BASE}/etc/profile.d/conda.sh"
+        conda activate cosyvoice 2>/dev/null || true
+    fi
+    
+    # Stop service if running
+    if is_running; then
+        echo "Stopping service first..."
+        stop_service
+        echo ""
+    fi
+    
+    # Force re-download
+    if [ -f "download_model.py" ]; then
+        python download_model.py --force
+        if [ $? -eq 0 ]; then
+            echo ""
+            echo "Model repaired successfully!"
+            echo "You can now start the service:"
+            echo "  ./start_service.sh"
+        fi
+    else
+        echo "Error: download_model.py not found"
+        exit 1
+    fi
+}
+
 case "${1:-}" in
     start)
         start_service
@@ -142,8 +195,14 @@ case "${1:-}" in
     logs)
         show_logs
         ;;
+    verify)
+        verify_model
+        ;;
+    repair)
+        repair_model
+        ;;
     *)
-        echo "Usage: $0 {start|stop|restart|status|logs}"
+        echo "Usage: $0 {start|stop|restart|status|logs|verify|repair}"
         echo ""
         echo "Commands:"
         echo "  start   - Start the TTS service"
@@ -151,6 +210,8 @@ case "${1:-}" in
         echo "  restart - Restart the TTS service"
         echo "  status  - Check service status"
         echo "  logs    - Show service logs (tail -f)"
+        echo "  verify  - Verify model integrity"
+        echo "  repair  - Repair/re-download model"
         exit 1
         ;;
 esac

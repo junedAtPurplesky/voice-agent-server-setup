@@ -69,6 +69,23 @@ if command -v nvidia-smi &> /dev/null; then
     echo ""
 fi
 
+# Quick model verification (optional pre-flight check)
+echo "Checking model status..."
+MODEL_PATH="pretrained_models/CosyVoice-300M-SFT"
+if [ -d "$MODEL_PATH" ]; then
+    # Check for critical file
+    if [ ! -f "$MODEL_PATH/speech_tokenizer_v1.onnx" ]; then
+        echo "⚠️  WARNING: Model appears incomplete (missing speech_tokenizer_v1.onnx)"
+        echo "   Service will auto-download complete model on startup..."
+        echo ""
+    else
+        echo "✓ Model files found"
+    fi
+else
+    echo "ℹ️  Model not found - will download on first startup (~1GB)"
+    echo ""
+fi
+
 # Set environment variables for optimal performance
 export OMP_NUM_THREADS=4
 export MKL_NUM_THREADS=4
@@ -80,7 +97,7 @@ echo "  Port: 8002"
 echo "  Model: CosyVoice-300M-SFT"
 echo ""
 echo "Note: First startup will download the model (~1GB)"
-echo "      This may take several minutes..."
+echo "      Service will auto-verify and repair model if needed"
 echo ""
 
 # Start service in background

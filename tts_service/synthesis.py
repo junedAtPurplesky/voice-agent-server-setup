@@ -56,6 +56,126 @@ class SynthesisEngine:
         self.available_speakers = []
         self._load_model()
     
+    def _verify_model_files(self, model_path: str) -> tuple[bool, List[str]]:
+        """
+        Verify that all required model files are present.
+        Returns: (is_complete, missing_files)
+        """
+        import os
+        
+        # Get required files from config (allows customization per model)
+        required_files = self.service_config.required_model_files
+        
+        missing_files = []
+        for file in required_files:
+            file_path = os.path.join(model_path, file)
+            if not os.path.exists(file_path):
+                missing_files.append(file)
+        
+        return len(missing_files) == 0, missing_files
+    
+    def _download_model(self, model_path_abs: str) -> bool:
+        """
+        Download model from ModelScope with verification.
+        Returns: True if successful, False otherwise
+        """
+        import os
+        import shutil
+        import time
+        
+        try:
+            from modelscope import snapshot_download
+            
+            logger.info(f"Downloading model: {self.service_config.modelscope_model_id}")
+            logger.info("This may take several minutes (model size ~1GB)...")
+            logger.info("")
+            logger.info("Download progress:")
+            
+            # Remove incomplete directory if it exists
+            if os.path.exists(model_path_abs):
+                logger.info(f"  Removing incomplete model directory...")
+                try:
+                    shutil.rmtree(model_path_abs)
+                    logger.info(f"  ✓ Cleanup complete")
+                except Exception as e:
+                    logger.warning(f"  Warning during cleanup: {e}")
+            
+            # Ensure parent directory exists
+            os.makedirs(os.path.dirname(model_path_abs), exist_ok=True)
+            
+            # Download model with timing
+            logger.info(f"  Starting download from ModelScope...")
+            download_start = time.time()
+            
+            try:
+                downloaded_path = snapshot_download(
+                    self.service_config.modelscope_model_id,
+                    local_dir=model_path_abs,
+                    local_files_only=False
+                )
+                
+                download_time = time.time() - download_start
+                logger.info(f"  ✓ Model downloaded to: {downloaded_path}")
+                logger.info(f"  Download took {download_time:.1f} seconds")
+                
+            except Exception as download_error:
+                logger.error(f"  ✗ Download failed: {download_error}")
+                logger.error("")
+                logger.error("Possible issues:")
+                logger.error("  - Network connection interrupted")
+                logger.error("  - ModelScope service unavailable")
+                logger.error("  - Insufficient disk space")
+                logger.error("  - Firewall blocking connection")
+                return False
+            
+            # Verify download completeness
+            logger.info("")
+            logger.info("Verifying downloaded files...")
+            is_complete, missing = self._verify_model_files(model_path_abs)
+            
+            if is_complete:
+                logger.info("  ✓ All required files present")
+                
+                # List all files with sizes
+                logger.info("")
+                logger.info("Downloaded files:")
+                total_size = 0
+                for file in sorted(os.listdir(model_path_abs)):
+                    file_path = os.path.join(model_path_abs, file)
+                    if os.path.isfile(file_path):
+                        size_mb = os.path.getsize(file_path) / (1024 * 1024)
+                        total_size += size_mb
+                        logger.info(f"    ✓ {file} ({size_mb:.1f} MB)")
+                
+                logger.info("")
+                logger.info(f"Total model size: {total_size:.1f} MB")
+                
+                return True
+            else:
+                logger.error(f"  ✗ Download incomplete! Missing files: {missing}")
+                logger.error("")
+                logger.error("The download completed but files are missing.")
+                logger.error("This may indicate:")
+                logger.error("  - Partial download due to network issue")
+                logger.error("  - ModelScope repository issue")
+                logger.error("  - Disk space ran out during download")
+                return False
+                
+        except ImportError:
+            logger.error("✗ ModelScope package not installed")
+            logger.error("Install with: pip install modelscope")
+            return False
+        except Exception as e:
+            logger.error(f"✗ Unexpected error during download: {e}")
+            logger.error("")
+            logger.error("Please download the model manually:")
+            logger.error(f"  python download_model.py --force")
+            logger.error("")
+            logger.error("Or using Python:")
+            logger.error(f"  cd {os.path.dirname(model_path_abs)}")
+            logger.error(f"  python -c \"from modelscope import snapshot_download; snapshot_download('{self.service_config.modelscope_model_id}', local_dir='{os.path.basename(model_path_abs)}')\"")
+            return False
+    
     def _load_model(self):
         """Load the CosyVoice model following official guidelines"""
         import os
@@ -99,7 +219,7 @@ class SynthesisEngine:
                 logger.error("  ./setup.sh")
                 logger.error("")
                 logger.error("Or manually install:")
-                logger.error("  1. Create conda env: conda create -n cosyvoice python=3.8")
+                logger.error("  1. Create conda env: conda create -n cosyvoice python=3.10")
                 logger.error("  2. Activate: conda activate cosyvoice")
                 logger.error("  3. Clone: git clone --recursive https://github.com/FunAudioLLM/CosyVoice.git")
                 logger.error("  4. Install: cd CosyVoice && pip install -r requirements.txt")
@@ -109,47 +229,70 @@ class SynthesisEngine:
             
             # Check if model exists locally
             logger.info("-" * 70)
-            logger.info("CHECKING MODEL AVAILABILITY")
+            logger.info("CHECKING MODEL AVAILABILITY AND INTEGRITY")
             logger.info("-" * 70)
             
             model_path_abs = os.path.abspath(self.service_config.model_path)
             logger.info(f"Looking for model at: {model_path_abs}")
             
-            if not os.path.exists(model_path_abs):
-                logger.warning(f"✗ Model not found at: {model_path_abs}")
+            # Check if directory exists
+            model_exists = os.path.exists(model_path_abs)
+            
+            if model_exists:
+                logger.info(f"✓ Model directory found")
+                
+                # Verify all required files are present (if enabled)
+                if self.service_config.verify_model_integrity:
+                    logger.info("Verifying model file integrity...")
+                    is_complete, missing_files = self._verify_model_files(model_path_abs)
+                    
+                    if not is_complete:
+                        logger.warning(f"✗ Model is INCOMPLETE! Missing files: {missing_files}")
+                        logger.warning("The model directory exists but is missing critical files.")
+                        logger.warning("This usually happens when download was interrupted.")
+                        
+                        if self.service_config.auto_repair_model and self.service_config.use_modelscope:
+                            logger.info("")
+                            logger.info("Auto-repair enabled. Attempting to re-download complete model...")
+                            if not self._download_model(model_path_abs):
+                                self._fallback_to_basic_tts()
+                                return
+                        elif self.service_config.use_modelscope:
+                            logger.error("✗ Auto-repair is disabled")
+                            logger.error("Set 'auto_repair_model=True' in config or manually fix:")
+                            logger.error(f"  rm -rf {model_path_abs}")
+                            logger.error(f"  python download_model.py --force")
+                            self._fallback_to_basic_tts()
+                            return
+                        else:
+                            logger.error("✗ Auto-download is disabled")
+                            logger.error("")
+                            logger.error("Please re-download the model manually:")
+                            logger.error(f"  rm -rf {model_path_abs}")
+                            logger.error(f"  python -c \"from modelscope import snapshot_download; snapshot_download('{self.service_config.modelscope_model_id}', local_dir='{model_path_abs}')\"")
+                            self._fallback_to_basic_tts()
+                            return
+                    else:
+                        logger.info(f"✓ All required model files present")
+                else:
+                    logger.info("Model integrity check disabled (verify_model_integrity=False)")
+                    
+            else:
+                logger.warning(f"✗ Model directory not found at: {model_path_abs}")
                 
                 if self.service_config.use_modelscope:
+                    logger.info("")
                     logger.info("Attempting to download from ModelScope...")
-                    try:
-                        from modelscope import snapshot_download
-                        logger.info(f"Downloading model: {self.service_config.modelscope_model_id}")
-                        logger.info("This may take several minutes (model size ~1GB)...")
-                        
-                        # Download model
-                        snapshot_download(
-                            self.service_config.modelscope_model_id,
-                            local_dir=model_path_abs
-                        )
-                        logger.info("✓ Model downloaded successfully")
-                        
-                    except Exception as e:
-                        logger.error(f"✗ Failed to download model: {e}")
-                        logger.error("")
-                        logger.error("Please download the model manually:")
-                        logger.error(f"  cd {os.path.dirname(model_path_abs)}")
-                        logger.error(f"  python -c \"from modelscope import snapshot_download; snapshot_download('{self.service_config.modelscope_model_id}', local_dir='{os.path.basename(model_path_abs)}')\"")
+                    if not self._download_model(model_path_abs):
                         self._fallback_to_basic_tts()
                         return
                 else:
                     logger.error("✗ Model not found and auto-download is disabled")
                     logger.error("")
                     logger.error("Please download the model manually:")
-                    logger.error(f"  cd {os.path.dirname(model_path_abs)}")
-                    logger.error(f"  python -c \"from modelscope import snapshot_download; snapshot_download('{self.service_config.modelscope_model_id}', local_dir='{os.path.basename(model_path_abs)}')\"")
+                    logger.error(f"  python -c \"from modelscope import snapshot_download; snapshot_download('{self.service_config.modelscope_model_id}', local_dir='{model_path_abs}')\"")
                     self._fallback_to_basic_tts()
                     return
-            else:
-                logger.info(f"✓ Model found at: {model_path_abs}")
             
             # Initialize CosyVoice model (official way)
             logger.info("-" * 70)

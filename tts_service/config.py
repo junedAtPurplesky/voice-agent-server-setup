@@ -22,6 +22,20 @@ class ServiceConfig(BaseModel):
     # ModelScope configuration (for auto-download)
     use_modelscope: bool = True  # Auto-download from ModelScope if model not found locally
     modelscope_model_id: str = "iic/CosyVoice-300M-SFT"  # ModelScope model ID for download
+    
+    # Model integrity checking
+    verify_model_integrity: bool = True  # Verify all required files are present before loading
+    auto_repair_model: bool = True  # Automatically re-download if model is incomplete
+    
+    # Required model files for verification (can be overridden for different models)
+    required_model_files: list = [
+        'speech_tokenizer_v1.onnx',
+        'campplus.onnx', 
+        'flow.decoder.estimator.fp32.onnx',
+        'cosyvoice.yaml',
+        'flow.pt',
+        'hift.pt'
+    ]
 
 
 class AudioConfig(BaseModel):

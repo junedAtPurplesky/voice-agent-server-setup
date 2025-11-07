@@ -60,9 +60,11 @@ Setup completed successfully!
 ./start_service.sh
 ```
 
+**⚠️ TROUBLESHOOTING: If service falls back to basic TTS mode, see [Troubleshooting](#troubleshooting) section below.**
+
 ### First Run (Model Download)
 
-On first run, CosyVoice2-0.5B model (~500MB) downloads automatically:
+On first run, CosyVoice-300M-SFT model (~1GB) downloads automatically:
 
 ```
 ==========================================
@@ -398,22 +400,64 @@ asyncio.run(low_latency_stream())
 
 ---
 
-## ❓ Troubleshooting Quick Fixes
+## ❓ Troubleshooting
+
+### Service falls back to basic TTS mode (Most Common Issue!)
+
+**Symptoms**: Logs show "ENTERING FALLBACK MODE" or error about missing `speech_tokenizer_v1.onnx`
+
+**Cause**: Model download was incomplete (missing critical files)
+
+**Fix Option 1 - Automatic (Recommended)**:
+```bash
+# Stop service
+./stop_service.sh
+
+# The service will auto-detect and re-download on next start
+./start_service.sh
+```
+
+**Fix Option 2 - Manual verification**:
+```bash
+# Verify model integrity
+python download_model.py --verify-only
+
+# Force complete re-download if needed
+python download_model.py --force
+```
+
+**Fix Option 3 - Full reset**:
+```bash
+# Remove incomplete model
+rm -rf pretrained_models/CosyVoice-300M-SFT
+
+# Restart service (will auto-download complete model)
+./start_service.sh
+```
 
 ### Service won't start
 ```bash
 # Re-run setup
 ./setup.sh
 
-# Check logs
-cat tts_service.log
+# Check logs for detailed error
+tail -f tts_service.log
 ```
 
-### Model download fails
+### Model download fails or times out
 ```bash
-# Clear cache and retry
-rm -rf models/
-./start_service.sh
+# Check internet connection
+curl -I https://modelscope.cn
+
+# Verify ModelScope is installed
+pip show modelscope
+
+# Manually download model
+python download_model.py
+
+# If all else fails, download manually:
+cd pretrained_models
+python -c "from modelscope import snapshot_download; snapshot_download('iic/CosyVoice-300M-SFT', local_dir='CosyVoice-300M-SFT')"
 ```
 
 ### CUDA out of memory
@@ -430,6 +474,10 @@ lsof -i :8002
 
 # Kill existing service
 ./tts_manager.sh stop
+
+# Or use different port
+export TTS_PORT=8003
+./start_service.sh
 ```
 
 ---
