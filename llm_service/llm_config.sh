@@ -1,3 +1,22 @@
+#!/usr/bin/env bash
+# ==========================================================
+# LLM Service Configuration
+# ==========================================================
+# Edit the values below to configure your LLM deployment
+# Only uncommented settings will be used
+
+# -------------------------------
+# ACTIVE CONFIGURATION
+# -------------------------------
+
+# Model Settings
+MODEL_NAME="Qwen/Qwen2.5-7B-Instruct-AWQ"
+HOST="0.0.0.0"
+PORT="8000"
+
+# Performance Settings
+QUANTIZATION="awq"
+
 # ==========================================================
 # 🔧 Optimized Additions for Low VRAM + High Performance
 # ==========================================================
