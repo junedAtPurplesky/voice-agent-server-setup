@@ -16,22 +16,43 @@ PORT="8000"
 
 # Performance Settings
 QUANTIZATION="awq"
-# GPU_MEMORY_UTILIZATION="0.6"
-# TENSOR_PARALLEL_SIZE="1"
-# MAX_NUM_SEQS="1"
-# SWAP_SPACE="1"
 
-# Optional Flags (set to empty string "" to disable)
-# ENFORCE_EAGER="--enforce-eager"
-# DISABLE_LOG_STATS="--disable-log-stats"
+# ==========================================================
+# 🔧 Optimized Additions for Low VRAM + High Performance
+# ==========================================================
 
-# -------------------------------
+# Memory & Performance
+GPU_MEMORY_UTILIZATION="0.55"          # keep VRAM under control (safe range: 0.55–0.65)
+TENSOR_PARALLEL_SIZE="1"               # single GPU
+MAX_NUM_SEQS="4"                       # small batch for efficient GPU utilization
+SWAP_SPACE="2"                         # 2GiB CPU swap backup to avoid OOM
+
+# Stability & Runtime
+ENFORCE_EAGER="--enforce-eager"        # prevent CUDA graph spikes
+DISABLE_LOG_STATS="--disable-log-stats"  # reduce logging overhead
+
+# Throughput Optimization
+ENABLE_CHUNKED_PREFILL="--enable-chunked-prefill"  # stream long inputs efficiently
+ENABLE_PREFIX_CACHING="--enable-prefix-caching"    # reuse cached prompt parts
+
+# Model Precision (recommended for smaller VRAM GPUs)
+DTYPE="bfloat16"                       # lighter than FP16, safer numerically
+MAX_MODEL_LEN="2048"                   # limit context to save memory
+MAX_NUM_BATCHED_TOKENS="1024"          # limit per-batch token load
+
+# Tool / Function Calling
+ENABLE_AUTO_TOOL_CHOICE="--enable-auto-tool-choice"
+TOOL_CALL_PARSER="hermes"
+
+# Advanced Tweaks
+#EXTRA_FLAGS="--gpu-memory-utilization 0.55 --max-num-seqs 4 --max-num-batched-tokens 1024"
+
+# ==========================================================
 # ALL SUPPORTED FLAGS (Reference)
-# -------------------------------
-# Uncomment and modify any flag below to enable it
-# Remove or comment out to disable
+# ==========================================================
+# (Everything below remains unchanged — reference only)
 
-## Model Configuration
+# Model Configuration
 # MODEL_NAME="meta-llama/Llama-2-7b-chat-hf"
 # TOKENIZER=""                           # Tokenizer name/path (default: same as model)
 # TOKENIZER_MODE="auto"                  # Tokenizer mode: auto, slow
@@ -126,31 +147,8 @@ TOOL_CALL_PARSER="hermes"                            # Tool call parser: hermes,
 # DISABLE_FRONTEND_MULTIPROCESSING=""    # --disable-frontend-multiprocessing
 
 ## Additional Custom Flags
-# Add any other vllm flags not listed above
-EXTRA_FLAGS=""
+#EXTRA_FLAGS="--gpu-memory-utilization 0.55 --max-num-seqs 4 --max-num-batched-tokens 1024"
 
 # ==========================================================
 # Example Configurations for Different Models
 # ==========================================================
-
-# # Llama 3 8B (Full precision)
-# MODEL_NAME="meta-llama/Meta-Llama-3-8B-Instruct"
-# QUANTIZATION=""
-# GPU_MEMORY_UTILIZATION="0.9"
-# MAX_NUM_SEQS="256"
-# DTYPE="auto"
-# TRUST_REMOTE_CODE="--trust-remote-code"
-
-# # Mistral 7B (FP16)
-# MODEL_NAME="mistralai/Mistral-7B-Instruct-v0.3"
-# QUANTIZATION=""
-# DTYPE="float16"
-# GPU_MEMORY_UTILIZATION="0.85"
-# MAX_NUM_SEQS="128"
-
-# # Phi-3 Mini
-# MODEL_NAME="microsoft/Phi-3-mini-4k-instruct"
-# TRUST_REMOTE_CODE="--trust-remote-code"
-# MAX_MODEL_LEN="4096"
-# GPU_MEMORY_UTILIZATION="0.7"
-
