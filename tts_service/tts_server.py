@@ -1,19 +1,18 @@
 #!/usr/bin/env python3
 """
-CosyVoice2 TTS Service
-High-performance text-to-speech service with streaming support
-Production-ready with ElevenLabs-style configurations
+ElevenLabs-compatible TTS Service
+High-performance text-to-speech service with full ElevenLabs API compatibility
 """
 
 import asyncio
 import json
 import logging
 import time
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Tuple
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Path, Query, Body, Header
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import StreamingResponse, Response
 from pydantic import BaseModel
 
 from config import (
@@ -28,6 +27,18 @@ from config import (
 from audio_utils import AudioConverter
 from text_processor import TextBuffer, StreamingSentenceIterator
 from synthesis import SynthesisEngine
+from auth import auth_manager, initialize_auth
+from elevenlabs_models import (
+    TextToSpeechRequest,
+    VoiceSettings,
+    Voice,
+    VoicesResponse,
+    Model,
+    ModelsResponse
+)
+from model_mapper import ModelMapper, AVAILABLE_MODELS
+
+# Routes will be imported after synthesis_engine is initialized
 
 # Configure logging
 logging.basicConfig(
@@ -38,9 +49,9 @@ logger = logging.getLogger(__name__)
 
 # FastAPI app
 app = FastAPI(
-    title="CosyVoice2 TTS Service",
+    title="ElevenLabs-Compatible TTS Service",
     version="1.0.0",
-    description="Production-ready text-to-speech service with real-time streaming and ElevenLabs-style configurations"
+    description="ElevenLabs-compatible text-to-speech service API"
 )
 
 # CORS middleware
@@ -56,24 +67,34 @@ app.add_middleware(
 synthesis_engine: Optional[SynthesisEngine] = None
 
 
-class TTSRequest(BaseModel):
-    """HTTP TTS request model"""
-    text: str
-    voice_config: Optional[VoiceConfig] = None
-    audio_config: Optional[AudioConfig] = None
-    synthesis_config: Optional[SynthesisConfig] = None
+# Voice settings conversion moved to routes module
 
 
 class StreamingSession:
-    """Manages a streaming TTS session"""
+    """Manages a streaming TTS session (ElevenLabs-compatible)"""
     
     def __init__(
         self,
         websocket: WebSocket,
-        session_config: SessionConfig
+        voice_id: str,
+        model_id: str,
+        voice_settings: Optional[VoiceSettings] = None
     ):
         self.websocket = websocket
-        self.config = session_config
+        self.voice_id = voice_id
+        self.model_id = model_id
+        self.voice_settings = voice_settings or VoiceSettings()
+        
+        # Convert to internal configs
+        from routes import convert_voice_settings_to_config
+        voice_config, synthesis_config = convert_voice_settings_to_config(self.voice_settings)
+        voice_config.speaker = voice_id  # Use voice_id as speaker
+        
+        # Create session config
+        session_config = SessionConfig()
+        session_config.voice = voice_config
+        session_config.synthesis = synthesis_config
+        session_config.audio = AudioConfig(encoding="pcm_s16le", sample_rate=24000)
         
         # Initialize components
         self.audio_converter = AudioConverter(session_config.audio)
@@ -87,7 +108,7 @@ class StreamingSession:
         self.total_chars_processed = 0
         self.total_audio_duration = 0.0
         
-        logger.info(f"Streaming session created with config: {session_config.model_dump()}")
+        logger.info(f"Streaming session created: voice_id={voice_id}, model_id={model_id}")
     
     async def start(self):
         """Start the session"""
@@ -99,27 +120,17 @@ class StreamingSession:
     async def stop(self):
         """Stop the session"""
         self.is_active = False
-        
-        # Flush any remaining text
         if self.text_buffer.has_data():
             await self._process_buffered_text()
     
     async def process_text(self, text: str):
-        """
-        Process incoming text chunk
-        
-        Args:
-            text: Text chunk to synthesize
-        """
+        """Process incoming text chunk"""
         try:
             if len(text) > SERVICE_CONFIG.max_text_length:
                 await self.send_error(f"Text too long (max {SERVICE_CONFIG.max_text_length} chars)")
                 return
             
-            # Add to buffer
             ready_sentences = self.text_buffer.add_text(text)
-            
-            # Synthesize if threshold reached
             if ready_sentences:
                 await self._synthesize_sentences(ready_sentences)
                 
@@ -131,12 +142,10 @@ class StreamingSession:
         """Force flush buffered text"""
         try:
             await self._process_buffered_text()
-            
             await self.websocket.send_json({
                 "type": "flush_complete",
                 "message": "All buffered text synthesized"
             })
-            
         except Exception as e:
             logger.error(f"Flush error: {e}")
             await self.send_error(str(e))
@@ -148,149 +157,43 @@ class StreamingSession:
             await self._synthesize_sentences(sentences)
     
     async def _synthesize_sentences(self, sentences: list):
-        """
-        Synthesize a batch of sentences
-        
-        Args:
-            sentences: List of sentences to synthesize
-        """
+        """Synthesize a batch of sentences"""
         try:
-            # Combine sentences
             text = " ".join(sentences)
             self.total_chars_processed += len(text)
             
-            # Send processing notification
-            await self.websocket.send_json({
-                "type": "synthesis_start",
-                "text": text,
-                "char_count": len(text)
-            })
+            from routes import convert_voice_settings_to_config
+            voice_config, synthesis_config = convert_voice_settings_to_config(self.voice_settings)
+            voice_config.speaker = self.voice_id
             
-            if self.config.streaming.enabled:
-                # Streaming synthesis
-                await self._streaming_synthesis(text)
-            else:
-                # Non-streaming synthesis
-                await self._batch_synthesis(text)
+            if synthesis_engine:
+                chunk_count = 0
+                start_time = time.time()
+                
+                for audio_chunk in synthesis_engine.synthesize_streaming(
+                    text,
+                    voice_config,
+                    synthesis_config,
+                    chunk_size=1024
+                ):
+                    audio_bytes = self.audio_converter.convert_audio(
+                        audio_chunk,
+                        24000
+                    )
+                    await self.websocket.send_bytes(audio_bytes)
+                    chunk_count += 1
+                
+                processing_time = time.time() - start_time
+                await self.websocket.send_json({
+                    "type": "audio_complete",
+                    "text": text,
+                    "chunks_sent": chunk_count,
+                    "processing_time": processing_time
+                })
                 
         except Exception as e:
             logger.error(f"Synthesis error: {e}")
             await self.send_error(f"Synthesis failed: {e}")
-    
-    async def _streaming_synthesis(self, text: str):
-        """Streaming synthesis with chunked output"""
-        try:
-            chunk_count = 0
-            start_time = time.time()
-            
-            # Stream audio chunks
-            for audio_chunk in synthesis_engine.synthesize_streaming(
-                text,
-                self.config.voice,
-                self.config.synthesis,
-                chunk_size=self.config.streaming.chunk_size
-            ):
-                # Convert audio
-                audio_bytes = self.audio_converter.convert_audio(
-                    audio_chunk,
-                    24000  # CosyVoice2 sample rate
-                )
-                
-                # Send audio chunk
-                await self.websocket.send_bytes(audio_bytes)
-                chunk_count += 1
-                
-                # Small delay for buffer management
-                if self.config.streaming.optimize_streaming_latency < 3:
-                    await asyncio.sleep(0.001)
-            
-            processing_time = time.time() - start_time
-            
-            # Send completion metadata
-            await self.websocket.send_json({
-                "type": "audio_complete",
-                "text": text,
-                "chunks_sent": chunk_count,
-                "processing_time": processing_time
-            })
-            
-        except Exception as e:
-            logger.error(f"Streaming synthesis error: {e}")
-            raise
-    
-    async def _batch_synthesis(self, text: str):
-        """Non-streaming synthesis (full audio at once)"""
-        try:
-            # Synthesize
-            result = synthesis_engine.synthesize(
-                text,
-                self.config.voice,
-                self.config.synthesis
-            )
-            
-            self.total_audio_duration += result.audio_duration
-            
-            # Convert audio
-            audio_bytes = self.audio_converter.convert_audio(
-                result.audio,
-                result.sample_rate
-            )
-            
-            # Send metadata first
-            await self.websocket.send_json({
-                "type": "audio_start",
-                **result.to_dict()
-            })
-            
-            # Send audio
-            await self.websocket.send_bytes(audio_bytes)
-            
-            # Send completion
-            await self.websocket.send_json({
-                "type": "audio_complete",
-                "text": text
-            })
-            
-        except Exception as e:
-            logger.error(f"Batch synthesis error: {e}")
-            raise
-    
-    async def handle_control_message(self, message: Dict[str, Any]):
-        """Handle control messages from client"""
-        msg_type = message.get("type")
-        
-        if msg_type == "flush":
-            # Flush buffered text
-            await self.flush()
-            
-        elif msg_type == "reset":
-            # Reset buffer
-            self.text_buffer.reset()
-            await self.websocket.send_json({
-                "type": "status",
-                "message": "Buffer reset"
-            })
-            
-        elif msg_type == "get_stats":
-            # Get statistics
-            stats = self.get_stats()
-            await self.websocket.send_json({
-                "type": "stats",
-                **stats
-            })
-            
-        else:
-            logger.warning(f"Unknown control message type: {msg_type}")
-    
-    def get_stats(self) -> Dict[str, Any]:
-        """Get session statistics"""
-        buffer_stats = self.text_buffer.get_stats()
-        
-        return {
-            "total_chars_processed": self.total_chars_processed,
-            "total_audio_duration": self.total_audio_duration,
-            **buffer_stats
-        }
     
     async def send_error(self, error_message: str):
         """Send error message to client"""
@@ -309,15 +212,32 @@ async def startup_event():
     global synthesis_engine
     
     logger.info("=" * 60)
-    logger.info("CosyVoice2 TTS Service v1.0.0")
+    logger.info("ElevenLabs-Compatible TTS Service v1.0.0")
     logger.info("=" * 60)
     
     try:
+        global synthesis_engine
+        
+        # Initialize authentication first
+        initialize_auth(
+            require_auth=SERVICE_CONFIG.require_auth,
+            api_keys=SERVICE_CONFIG.api_keys if SERVICE_CONFIG.api_keys else None
+        )
+        
         # Initialize synthesis engine
         synthesis_engine = SynthesisEngine(SERVICE_CONFIG)
+        
+        # Import and setup routes after engine is initialized
+        from routes import router as api_router, set_synthesis_engine
+        set_synthesis_engine(synthesis_engine)
+        app.include_router(api_router)
+        
         logger.info("Service ready!")
         logger.info(f"Listening on {SERVICE_CONFIG.host}:{SERVICE_CONFIG.port}")
-        
+        if SERVICE_CONFIG.require_auth:
+            logger.info(f"🔒 Authentication: REQUIRED ({len(SERVICE_CONFIG.api_keys)} API key(s) configured)")
+        else:
+            logger.info("🔓 Authentication: OPTIONAL (disabled)")
     except Exception as e:
         logger.error(f"Failed to initialize service: {e}")
         raise
@@ -327,263 +247,69 @@ async def startup_event():
 async def health_check():
     """Health check endpoint"""
     model_info = synthesis_engine.get_model_info() if synthesis_engine else {}
-    
     return {
         "status": "healthy",
         "version": "1.0.0",
-        "service": "CosyVoice2 TTS",
+        "service": "ElevenLabs-Compatible TTS",
         **model_info
     }
 
 
-@app.get("/config/defaults")
-async def get_default_config():
-    """Get default configuration"""
-    return SessionConfig().model_dump()
+# ElevenLabs-compatible routes will be included after startup
 
 
-@app.get("/voices")
-async def list_voices():
+@app.websocket("/v1/text-to-speech/{voice_id}/stream")
+async def websocket_text_to_speech_stream(
+    websocket: WebSocket,
+    voice_id: str = Path(..., description="Voice ID"),
+    model_id: Optional[str] = Query(None, description="Model ID"),
+    xi_api_key: Optional[str] = Query(None, description="API key")
+):
     """
-    List available voices
-    
-    Returns:
-        List of available voice configurations
-    """
-    if not synthesis_engine:
-        raise HTTPException(status_code=503, detail="Service not initialized")
-    
-    voices = synthesis_engine.list_voices()
-    
-    return {
-        "voices": voices,
-        "count": len(voices)
-    }
-
-
-@app.post("/synthesize")
-async def synthesize_text(request: TTSRequest):
-    """
-    Simple TTS endpoint for text synthesis
-    
-    Args:
-        request: TTS request with text and optional configurations
-    
-    Returns:
-        JSON response with audio data (base64) and metadata
-    """
-    try:
-        if not synthesis_engine:
-            raise HTTPException(status_code=503, detail="Service not initialized")
-        
-        # Validate text length
-        if len(request.text) > SERVICE_CONFIG.max_text_length:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Text too long (max {SERVICE_CONFIG.max_text_length} chars)"
-            )
-        
-        # Use provided configs or defaults
-        voice_config = request.voice_config or VoiceConfig()
-        audio_config = request.audio_config or AudioConfig()
-        synthesis_config = request.synthesis_config or SynthesisConfig()
-        
-        # Synthesize
-        result = synthesis_engine.synthesize(
-            request.text,
-            voice_config,
-            synthesis_config
-        )
-        
-        # Convert audio
-        audio_converter = AudioConverter(audio_config)
-        audio_bytes = audio_converter.convert_audio(
-            result.audio,
-            result.sample_rate
-        )
-        
-        # Encode to base64 for JSON response
-        import base64
-        audio_base64 = base64.b64encode(audio_bytes).decode('utf-8')
-        
-        return JSONResponse(content={
-            "success": True,
-            "audio_base64": audio_base64,
-            "audio_format": audio_config.encoding,
-            **result.to_dict()
-        })
-        
-    except Exception as e:
-        logger.error(f"Synthesis error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.post("/synthesize/stream")
-async def synthesize_stream(request: TTSRequest):
-    """
-    Streaming TTS endpoint - returns audio as streaming response
-    
-    Args:
-        request: TTS request with text and optional configurations
-    
-    Returns:
-        Streaming audio response
-    """
-    try:
-        if not synthesis_engine:
-            raise HTTPException(status_code=503, detail="Service not initialized")
-        
-        if len(request.text) > SERVICE_CONFIG.max_text_length:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Text too long (max {SERVICE_CONFIG.max_text_length} chars)"
-            )
-        
-        voice_config = request.voice_config or VoiceConfig()
-        audio_config = request.audio_config or AudioConfig()
-        synthesis_config = request.synthesis_config or SynthesisConfig()
-        
-        # Create audio converter
-        audio_converter = AudioConverter(audio_config)
-        
-        async def generate_audio():
-            """Generator for streaming audio"""
-            for audio_chunk in synthesis_engine.synthesize_streaming(
-                request.text,
-                voice_config,
-                synthesis_config,
-                chunk_size=1024
-            ):
-                # Convert chunk
-                audio_bytes = audio_converter.convert_audio(
-                    audio_chunk,
-                    24000
-                )
-                yield audio_bytes
-        
-        return StreamingResponse(
-            generate_audio(),
-            media_type=f"audio/{audio_config.encoding}"
-        )
-        
-    except Exception as e:
-        logger.error(f"Streaming synthesis error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.websocket("/stream")
-async def websocket_stream(websocket: WebSocket):
-    """
-    Real-time streaming TTS endpoint via WebSocket
+    WebSocket streaming TTS (ElevenLabs-compatible)
     
     Protocol:
     1. Client connects
-    2. Client sends JSON config message (optional):
-       {"type": "config", "audio": {...}, "voice": {...}, "streaming": {...}, ...}
-    3. Client sends text messages:
-       {"type": "text", "text": "..."}
-    4. Server sends:
-       - {"type": "synthesis_start", "text": "...", "char_count": ...}
-       - Binary audio chunks
-       - {"type": "audio_complete", "text": "...", ...}
-    5. Client can send control messages:
-       - {"type": "flush"} - Flush buffered text
-       - {"type": "reset"} - Reset buffer
-       - {"type": "get_stats"} - Get statistics
+    2. Client sends text messages: {"text": "..."}
+    3. Server streams audio chunks
     """
     await websocket.accept()
-    logger.info("WebSocket connection established")
+    logger.info(f"WebSocket connection established: voice_id={voice_id}")
+    
+    # Parse voice settings from query or use defaults
+    voice_settings = VoiceSettings()
+    model_id = model_id or ModelMapper.get_default_model()
     
     session: Optional[StreamingSession] = None
-    session_config = SessionConfig()  # Default config
-    config_received = False
     
     try:
+        session = StreamingSession(websocket, voice_id, model_id, voice_settings)
+        await session.start()
+        
         while True:
-            # Receive data
             data = await websocket.receive()
             
             if "text" in data:
-                # JSON message
                 try:
                     message = json.loads(data["text"])
                     msg_type = message.get("type")
                     
-                    if msg_type == "config":
-                        # Configuration message
-                        if not config_received:
-                            try:
-                                # Parse configuration
-                                if "audio" in message:
-                                    session_config.audio = AudioConfig(**message["audio"])
-                                if "voice" in message:
-                                    session_config.voice = VoiceConfig(**message["voice"])
-                                if "streaming" in message:
-                                    session_config.streaming = StreamingConfig(**message["streaming"])
-                                if "synthesis" in message:
-                                    session_config.synthesis = SynthesisConfig(**message["synthesis"])
-                                if "text_processing" in message:
-                                    session_config.text_processing = TextProcessingConfig(
-                                        **message["text_processing"]
-                                    )
-                                
-                                # Create session with config
-                                session = StreamingSession(websocket, session_config)
-                                await session.start()
-                                config_received = True
-                                
-                                await websocket.send_json({
-                                    "type": "ready",
-                                    "message": "Session configured and ready",
-                                    "config": session_config.model_dump()
-                                })
-                                
-                                logger.info("Session configured by client")
-                                
-                            except Exception as e:
-                                logger.error(f"Config parsing error: {e}")
-                                await websocket.send_json({
-                                    "type": "error",
-                                    "message": f"Invalid configuration: {e}"
-                                })
-                        else:
-                            await websocket.send_json({
-                                "type": "error",
-                                "message": "Configuration already set"
-                            })
-                    
-                    elif msg_type == "text":
-                        # Text to synthesize
+                    if msg_type == "text" or "text" in message:
                         text_content = message.get("text", "")
-                        
-                        if not text_content:
-                            await websocket.send_json({
-                                "type": "error",
-                                "message": "Empty text provided"
-                            })
-                            continue
-                        
-                        # Create default session if not configured yet
-                        if not session:
-                            session = StreamingSession(websocket, session_config)
-                            await session.start()
-                            config_received = True
-                        
-                        # Process text
-                        await session.process_text(text_content)
+                        if text_content:
+                            await session.process_text(text_content)
                     
-                    elif msg_type in ["flush", "reset", "get_stats"]:
-                        # Control messages
-                        if not session:
-                            # Create default session if not configured yet
-                            session = StreamingSession(websocket, session_config)
-                            await session.start()
-                            config_received = True
-                        
-                        await session.handle_control_message(message)
+                    elif msg_type == "flush":
+                        await session.flush()
+                    
+                    elif msg_type == "reset":
+                        session.text_buffer.reset()
+                        await websocket.send_json({
+                            "type": "status",
+                            "message": "Buffer reset"
+                        })
                     
                     else:
-                        logger.warning(f"Unknown message type: {msg_type}")
                         await websocket.send_json({
                             "type": "error",
                             "message": f"Unknown message type: {msg_type}"
@@ -605,6 +331,28 @@ async def websocket_stream(websocket: WebSocket):
             await session.stop()
 
 
+# Legacy endpoints (for backward compatibility)
+@app.get("/voices")
+async def list_voices_legacy():
+    """Legacy voices endpoint"""
+    return await list_voices()
+
+
+@app.post("/synthesize")
+async def synthesize_legacy(request: Dict[str, Any]):
+    """Legacy synthesis endpoint"""
+    # Convert legacy format to new format
+    voice_id = request.get("voice_config", {}).get("speaker", "default")
+    text = request.get("text", "")
+    
+    tts_request = TextToSpeechRequest(
+        text=text,
+        voice_settings=VoiceSettings()
+    )
+    
+    return await text_to_speech(voice_id=voice_id, request=tts_request)
+
+
 if __name__ == "__main__":
     import uvicorn
     
@@ -615,4 +363,3 @@ if __name__ == "__main__":
         log_level=SERVICE_CONFIG.log_level,
         access_log=True
     )
-

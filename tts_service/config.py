@@ -19,6 +19,16 @@ class ServiceConfig(BaseModel):
     log_level: str = "info"  # Set to "debug" for detailed model loading logs
     max_text_length: int = 5000  # Maximum text length in characters
     
+    # Authentication configuration (Production)
+    require_auth: bool = Field(
+        default=False,
+        description="Require API key authentication (set TTS_REQUIRE_AUTH=true in production)"
+    )
+    api_keys: List[str] = Field(
+        default_factory=list,
+        description="List of valid API keys (set via TTS_API_KEYS env var, comma-separated)"
+    )
+    
     # ModelScope configuration (for auto-download)
     use_modelscope: bool = True  # Auto-download from ModelScope if model not found locally
     modelscope_model_id: str = "iic/CosyVoice-300M-SFT"  # ModelScope model ID for download
@@ -251,5 +261,90 @@ class SessionConfig(BaseModel):
 
 
 # Default service configuration
-SERVICE_CONFIG = ServiceConfig()
+# Load from .env file and environment variables
+import os
+from pathlib import Path
+import logging
+
+# Initialize logger for config loading
+logger = logging.getLogger(__name__)
+
+# Try to load python-dotenv for .env file support
+try:
+    from dotenv import load_dotenv
+    # Load .env file from the same directory as this config file
+    env_path = Path(__file__).parent / '.env'
+    if env_path.exists():
+        load_dotenv(env_path)
+        logger.info(f"Loaded environment variables from {env_path}")
+    else:
+        # Try to load from current working directory
+        load_dotenv()
+except ImportError:
+    # python-dotenv not installed, skip .env file loading
+    logger.warning("python-dotenv not installed. Install with: pip install python-dotenv")
+    logger.warning("Environment variables will only be loaded from system environment")
+
+def load_service_config() -> ServiceConfig:
+    """Load service configuration from .env file and environment variables"""
+    config = ServiceConfig()
+    
+    # Override with environment variables if present
+    require_auth_env = os.getenv("TTS_REQUIRE_AUTH", "").lower()
+    if require_auth_env in ("true", "1", "yes", "on"):
+        config.require_auth = True
+        logger.info("Authentication is REQUIRED (TTS_REQUIRE_AUTH=true)")
+    else:
+        logger.info("Authentication is OPTIONAL (TTS_REQUIRE_AUTH not set or false)")
+    
+    # Load API keys from environment (comma-separated)
+    api_keys_env = os.getenv("TTS_API_KEYS", "")
+    if api_keys_env:
+        config.api_keys = [key.strip() for key in api_keys_env.split(",") if key.strip()]
+        logger.info(f"Loaded {len(config.api_keys)} API key(s) from environment")
+    
+    # Override ALL config values from environment if present
+    # Server configuration
+    if os.getenv("TTS_HOST"):
+        config.host = os.getenv("TTS_HOST")
+    if os.getenv("TTS_PORT"):
+        config.port = int(os.getenv("TTS_PORT"))
+    if os.getenv("TTS_LOG_LEVEL"):
+        config.log_level = os.getenv("TTS_LOG_LEVEL")
+    if os.getenv("TTS_MAX_TEXT_LENGTH"):
+        config.max_text_length = int(os.getenv("TTS_MAX_TEXT_LENGTH"))
+    
+    # Model configuration
+    if os.getenv("TTS_MODEL_NAME"):
+        config.model_name = os.getenv("TTS_MODEL_NAME")
+    if os.getenv("TTS_MODEL_PATH"):
+        config.model_path = os.getenv("TTS_MODEL_PATH")
+    if os.getenv("TTS_DEVICE"):
+        device_env = os.getenv("TTS_DEVICE").lower()
+        if device_env == "auto":
+            config.device = "cuda" if torch.cuda.is_available() else "cpu"
+        else:
+            config.device = device_env
+    
+    # ModelScope configuration
+    if os.getenv("TTS_USE_MODELSCOPE"):
+        use_modelscope_env = os.getenv("TTS_USE_MODELSCOPE", "").lower()
+        config.use_modelscope = use_modelscope_env in ("true", "1", "yes", "on")
+    if os.getenv("TTS_MODELSCOPE_MODEL_ID"):
+        config.modelscope_model_id = os.getenv("TTS_MODELSCOPE_MODEL_ID")
+    if os.getenv("TTS_VERIFY_MODEL_INTEGRITY"):
+        verify_env = os.getenv("TTS_VERIFY_MODEL_INTEGRITY", "").lower()
+        config.verify_model_integrity = verify_env in ("true", "1", "yes", "on")
+    if os.getenv("TTS_AUTO_REPAIR_MODEL"):
+        auto_repair_env = os.getenv("TTS_AUTO_REPAIR_MODEL", "").lower()
+        config.auto_repair_model = auto_repair_env in ("true", "1", "yes", "on")
+    
+    # Warn if auth is required but no keys provided
+    if config.require_auth and not config.api_keys:
+        logger.warning("WARNING: Authentication is required but no API keys provided!")
+        logger.warning("Set TTS_API_KEYS in .env file or environment variable")
+    
+    return config
+
+SERVICE_CONFIG = load_service_config()
 
