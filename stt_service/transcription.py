@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 
 class TranscriptionResult:
-    """Result of transcription"""
+    """Result of transcription - Speechmatics-compatible format"""
     def __init__(
         self,
         text: str,
@@ -44,6 +44,38 @@ class TranscriptionResult:
             "processing_time": self.processing_time,
             "audio_duration": self.audio_duration,
             "realtime_factor": self.realtime_factor
+        }
+    
+    def to_speechmatics_format(self, output_format: str = "json") -> Dict[str, Any]:
+        """
+        Convert to Speechmatics-compatible format
+        
+        Args:
+            output_format: "json" or "text"
+            
+        Returns:
+            Speechmatics-compatible response
+        """
+        if output_format == "text":
+            return {"transcript": self.text}
+        
+        # Speechmatics JSON format
+        results = []
+        for segment in self.segments:
+            results.append({
+                "start_time": segment.get("start", 0.0),
+                "end_time": segment.get("end", 0.0),
+                "alternatives": [
+                    {
+                        "confidence": segment.get("confidence", 0.95),
+                        "transcript": segment.get("text", "")
+                    }
+                ]
+            })
+        
+        return {
+            "language": self.language,
+            "results": results
         }
 
 
@@ -128,7 +160,8 @@ class TranscriptionEngine:
                 segment_dict = {
                     "start": segment.start,
                     "end": segment.end,
-                    "text": segment.text.strip()
+                    "text": segment.text.strip(),
+                    "confidence": getattr(segment, 'probability', 0.95)  # Use probability if available
                 }
                 text_segments.append(segment_dict)
                 full_text += segment.text.strip() + " "

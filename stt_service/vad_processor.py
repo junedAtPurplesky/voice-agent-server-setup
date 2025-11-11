@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """
-Voice Activity Detection (VAD) processor
+Voice Activity Detection (VAD) processor using Silero VAD
 """
 
 from collections import deque
 from typing import Dict, Any, Optional
 import logging
-
-import webrtcvad
+import numpy as np
+import torch
 
 from config import VADConfig, AudioConfig
 
@@ -44,28 +44,23 @@ class VADResult:
 
 
 class AudioBuffer:
-    """Manages audio buffering and VAD for streaming"""
+    """Manages audio buffering and VAD for streaming using Silero VAD"""
     
     def __init__(self, vad_config: VADConfig, audio_config: AudioConfig):
         self.vad_config = vad_config
         self.audio_config = audio_config
         
-        # Calculate frame size based on sample rate and frame duration
-        # Frame size in samples
-        samples_per_frame = int(
-            audio_config.sample_rate * vad_config.frame_duration / 1000
-        )
-        # Frame size in bytes (16-bit = 2 bytes per sample, mono)
-        self.frame_size = samples_per_frame * 2
+        # Initialize Silero VAD
+        self.vad_model = None
+        self.get_speech_timestamps = None
+        self.read_audio = None
         
-        # Initialize VAD
-        self.vad = None
         if vad_config.enabled:
             try:
-                self.vad = webrtcvad.Vad(vad_config.mode)
-                logger.info(f"VAD initialized (mode={vad_config.mode}, frame_duration={vad_config.frame_duration}ms)")
+                self._load_silero_vad()
+                logger.info("Silero VAD initialized successfully")
             except Exception as e:
-                logger.error(f"Failed to initialize VAD: {e}")
+                logger.error(f"Failed to initialize Silero VAD: {e}")
                 self.vad_config.enabled = False
         
         # Buffers
@@ -73,11 +68,27 @@ class AudioBuffer:
         self.speech_buffer = bytearray()
         
         # State tracking
-        self.speech_frames = deque(maxlen=100)
-        self.silence_frames = 0
         self.is_speaking = False
-        self.total_speech_frames = 0
+        self.speech_start_time = None
+        self.last_speech_time = None
+        self.silence_start_time = None
         
+    def _load_silero_vad(self):
+        """Load Silero VAD model"""
+        try:
+            model, utils = torch.hub.load(
+                repo_or_dir='snakers4/silero-vad',
+                model='silero_vad',
+                force_reload=False,
+                onnx=False
+            )
+            self.vad_model = model
+            (self.get_speech_timestamps, _, self.read_audio, _, _) = utils
+            logger.info("Silero VAD model loaded")
+        except Exception as e:
+            logger.error(f"Failed to load Silero VAD model: {e}")
+            raise
+    
     def add_audio(self, audio_bytes: bytes) -> VADResult:
         """
         Add audio bytes and perform VAD processing
@@ -89,98 +100,112 @@ class AudioBuffer:
             VADResult with detection information
         """
         if not self.vad_config.enabled:
-            # VAD disabled, just accumulate audio
             return self._no_vad_mode(audio_bytes)
         
+        # Add to buffer
         self.buffer.extend(audio_bytes)
+        self.speech_buffer.extend(audio_bytes)
+        
+        # Process in chunks (Silero VAD works best with larger chunks)
+        # Process when we have at least 0.5 seconds of audio (8000 samples * 2 bytes = 16000 bytes)
+        min_chunk_size = self.vad_config.sample_rate * 1  # 0.5 second in bytes
+        max_buffer_size = self.vad_config.sample_rate * 2 * 2  # 2 seconds
         
         result = VADResult()
         
-        # Process complete frames
-        while len(self.buffer) >= self.frame_size:
-            frame = bytes(self.buffer[:self.frame_size])
-            self.buffer = self.buffer[self.frame_size:]
+        if len(self.buffer) >= min_chunk_size:
+            # Convert buffer to numpy array
+            audio_np = self._bytes_to_numpy(bytes(self.buffer))
             
-            # Run VAD on frame
-            vad_result = self._process_frame(frame)
-            
-            if vad_result:
-                result = vad_result
-                if result.end_of_utterance:
-                    break
-        
-        return result
-    
-    def _process_frame(self, frame: bytes) -> Optional[VADResult]:
-        """Process a single audio frame with VAD"""
-        try:
-            is_speech = self.vad.is_speech(frame, self.audio_config.sample_rate)
-            
-            self.speech_frames.append(is_speech)
-            
-            if is_speech:
-                return self._handle_speech_frame(frame)
-            else:
-                return self._handle_silence_frame(frame)
-                
-        except Exception as e:
-            logger.error(f"VAD processing error: {e}")
-            return None
-    
-    def _handle_speech_frame(self, frame: bytes) -> VADResult:
-        """Handle a frame detected as speech"""
-        self.silence_frames = 0
-        self.total_speech_frames += 1
-        
-        # Start speaking if not already
-        if not self.is_speaking:
-            speech_ratio = sum(self.speech_frames) / len(self.speech_frames)
-            if speech_ratio >= self.vad_config.speech_threshold:
-                self.is_speaking = True
-                self.speech_buffer = bytearray()
-                logger.debug("Speech started")
-        
-        # Accumulate audio
-        if self.is_speaking:
-            self.speech_buffer.extend(frame)
-        
-        return VADResult(
-            has_speech=True,
-            is_speaking=self.is_speaking,
-            speech_duration=self._get_speech_duration()
-        )
-    
-    def _handle_silence_frame(self, frame: bytes) -> VADResult:
-        """Handle a frame detected as silence"""
-        result = VADResult()
-        
-        if self.is_speaking:
-            self.silence_frames += 1
-            self.speech_buffer.extend(frame)
-            
-            silence_duration = self._get_silence_duration()
-            speech_duration = self._get_speech_duration()
-            
-            result.is_speaking = True
-            result.speech_duration = speech_duration
-            result.silence_duration = silence_duration
-            
-            # Check for end of utterance
-            if (silence_duration >= self.vad_config.silence_duration and
-                speech_duration >= self.vad_config.min_speech_duration):
-                
-                result.end_of_utterance = True
-                result.audio_for_transcription = bytes(self.speech_buffer)
-                
-                logger.debug(
-                    f"End of utterance (speech={speech_duration:.2f}s, "
-                    f"silence={silence_duration:.2f}s)"
+            # Run VAD
+            try:
+                speech_timestamps = self.get_speech_timestamps(
+                    audio_np,
+                    self.vad_model,
+                    threshold=self.vad_config.threshold,
+                    min_speech_duration_ms=self.vad_config.min_speech_duration_ms,
+                    min_silence_duration_ms=self.vad_config.min_silence_duration_ms,
+                    speech_pad_ms=self.vad_config.speech_pad_ms,
+                    sampling_rate=self.vad_config.sample_rate
                 )
                 
-                # Reset state
-                self._reset_state()
+                # Check if there's speech in the recent audio
+                current_time = len(self.buffer) / (self.vad_config.sample_rate * 2)
+                recent_speech = False
+                
+                if speech_timestamps:
+                    # Check if there's speech in the last 0.3 seconds
+                    for ts in speech_timestamps:
+                        if ts['end'] >= current_time - 0.3:
+                            recent_speech = True
+                            break
+                
+                if recent_speech:
+                    # Speech detected
+                    if not self.is_speaking:
+                        self.is_speaking = True
+                        self.speech_start_time = current_time
+                        self.speech_buffer = bytearray(bytes(self.buffer))
+                        logger.debug("Speech started")
+                    
+                    self.last_speech_time = current_time
+                    self.silence_start_time = None
+                    
+                    result.has_speech = True
+                    result.is_speaking = True
+                    result.speech_duration = self._get_speech_duration()
+                    
+                    # Keep a rolling buffer (keep last 2 seconds)
+                    if len(self.buffer) > max_buffer_size:
+                        # Keep only the last 2 seconds
+                        self.buffer = bytearray(self.buffer[-max_buffer_size:])
+                else:
+                    # No recent speech
+                    if self.is_speaking:
+                        # We were speaking, check for end of utterance
+                        if self.silence_start_time is None:
+                            self.silence_start_time = current_time
+                        
+                        silence_duration = current_time - self.silence_start_time
+                        speech_duration = self._get_speech_duration()
+                        
+                        result.is_speaking = True
+                        result.speech_duration = speech_duration
+                        result.silence_duration = silence_duration
+                        
+                        # Check if silence is long enough
+                        silence_duration_ms = silence_duration * 1000
+                        if (silence_duration_ms >= self.vad_config.min_silence_duration_ms and
+                            speech_duration >= (self.vad_config.min_speech_duration_ms / 1000.0)):
+                            
+                            result.end_of_utterance = True
+                            result.audio_for_transcription = bytes(self.speech_buffer)
+                            
+                            logger.debug(
+                                f"End of utterance (speech={speech_duration:.2f}s, "
+                                f"silence={silence_duration:.2f}s)"
+                            )
+                            
+                            # Reset state
+                            self._reset_state()
+                    else:
+                        # No speech, clear buffer periodically
+                        if len(self.buffer) > max_buffer_size:
+                            self.buffer.clear()
+                            
+            except Exception as e:
+                logger.error(f"VAD processing error: {e}")
+                # Fallback: assume speech if we have audio
+                result.has_speech = True
+                result.is_speaking = True
         
         return result
+    
+    def _bytes_to_numpy(self, audio_bytes: bytes) -> np.ndarray:
+        """Convert audio bytes to numpy array"""
+        audio_np = np.frombuffer(audio_bytes, dtype=np.int16)
+        audio_np = audio_np.astype(np.float32) / 32768.0
+        return audio_np
     
     def _no_vad_mode(self, audio_bytes: bytes) -> VADResult:
         """Handle audio when VAD is disabled"""
@@ -203,8 +228,9 @@ class AudioBuffer:
             return None
             
         speech_duration = self._get_speech_duration()
+        min_duration = self.vad_config.min_speech_duration_ms / 1000.0
         
-        if speech_duration >= self.vad_config.min_speech_duration:
+        if speech_duration >= min_duration:
             return bytes(self.speech_buffer)
             
         return None
@@ -231,10 +257,10 @@ class AudioBuffer:
     def _reset_state(self):
         """Reset speech detection state"""
         self.speech_buffer.clear()
-        self.speech_frames.clear()
-        self.silence_frames = 0
         self.is_speaking = False
-        self.total_speech_frames = 0
+        self.speech_start_time = None
+        self.last_speech_time = None
+        self.silence_start_time = None
     
     def _get_speech_duration(self) -> float:
         """Calculate current speech duration in seconds"""
@@ -242,18 +268,12 @@ class AudioBuffer:
             return 0.0
         return len(self.speech_buffer) / (self.audio_config.sample_rate * 2)
     
-    def _get_silence_duration(self) -> float:
-        """Calculate current silence duration in seconds"""
-        return (self.silence_frames * self.vad_config.frame_duration) / 1000.0
-    
     def get_stats(self) -> Dict[str, Any]:
         """Get current buffer statistics"""
         return {
             "is_speaking": self.is_speaking,
             "speech_duration": self._get_speech_duration(),
-            "silence_duration": self._get_silence_duration(),
+            "silence_duration": (self.silence_start_time - self.last_speech_time) if (self.silence_start_time and self.last_speech_time) else 0.0,
             "buffer_size": len(self.speech_buffer),
-            "frame_buffer_size": len(self.buffer),
-            "total_speech_frames": self.total_speech_frames
+            "frame_buffer_size": len(self.buffer)
         }
-
