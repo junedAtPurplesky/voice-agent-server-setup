@@ -21,6 +21,7 @@ pydantic==2.5.3
 # Utilities
 requests==2.31.0
 python-dotenv==1.0.0
+pydub>=0.25.1
 
 # =============================================================================
 # CosyVoice Dependencies (handled by CosyVoice/requirements.txt)
@@ -30,7 +31,7 @@ python-dotenv==1.0.0
 # - torchaudio (installed via setup.sh)
 # - transformers
 # - onnxruntime / onnxruntime-gpu
-# - openai-whisper
+# - openai-whi1sper
 # - librosa
 # - soundfile
 # - modelscope
