@@ -98,14 +98,32 @@ class AudioConverter:
         return audioop.lin2alaw(pcm_bytes, 2)
     
     def resample(self, audio_bytes: bytes, source_rate: int, target_rate: int) -> bytes:
-        """Resample audio using audioop"""
+        """
+        Resample audio efficiently using audioop.
+        Handles all common sample rates including 48000 Hz reliably.
+        """
         if source_rate == target_rate:
             return audio_bytes
         
-        resampled, _ = audioop.ratecv(
-            audio_bytes, 2, 1, source_rate, target_rate, None
-        )
-        return resampled
+        # Ensure we have valid rates
+        if source_rate <= 0 or target_rate <= 0:
+            raise ValueError(f"Invalid sample rates: source={source_rate}, target={target_rate}")
+        
+        # audioop.ratecv requires integer sample widths (2 bytes for 16-bit PCM)
+        # It efficiently handles resampling using linear interpolation
+        try:
+            resampled, _ = audioop.ratecv(
+                audio_bytes,  # Input audio bytes
+                2,            # Sample width in bytes (16-bit = 2 bytes)
+                1,            # Number of channels (mono)
+                source_rate,  # Source sample rate
+                target_rate,  # Target sample rate
+                None          # State (None for first call)
+            )
+            return resampled
+        except Exception as e:
+            logger.error(f"Resampling failed: {e} (source={source_rate}Hz, target={target_rate}Hz)")
+            raise
     
     def convert_to_mp3_pydub(self, audio_bytes: bytes, sample_rate: int) -> bytes:
         """Convert PCM to MP3 using pydub (preferred method)"""
@@ -237,23 +255,48 @@ class AudioConverter:
     
     def convert_audio(self, audio_np: np.ndarray, source_sample_rate: int) -> bytes:
         """
-        Convert audio to target format
+        Convert audio to target format efficiently and reliably.
         
         Supported formats:
         - MP3: using pydub (preferred) or ffmpeg
-        - PCM: native conversion
+        - PCM: native conversion with efficient resampling
         - μ-law/A-law: native conversion
         - Opus: using ffmpeg
+        
+        Args:
+            audio_np: Input audio as numpy array (float32, range [-1.0, 1.0])
+            source_sample_rate: Source sample rate in Hz
+            
+        Returns:
+            Converted audio bytes in target format
         """
         codec = self.format_config.codec
         target_rate = self.format_config.sample_rate
         
-        # Convert to PCM16
-        audio_bytes = self.numpy_to_pcm16(audio_np)
+        # Validate input
+        if audio_np.size == 0:
+            raise ValueError("Empty audio input")
+        if source_sample_rate <= 0:
+            raise ValueError(f"Invalid source sample rate: {source_sample_rate}")
         
-        # Resample if needed
-        if source_sample_rate != target_rate and codec not in ["ulaw", "alaw"]:
-            audio_bytes = self.resample(audio_bytes, source_sample_rate, target_rate)
+        # Convert to PCM16 (16-bit signed integer)
+        audio_bytes = self.numpy_to_pcm16(audio_np)
+        current_rate = source_sample_rate
+        
+        # Handle special cases for ulaw/alaw (must be 8kHz)
+        if codec in ["ulaw", "alaw"]:
+            if current_rate != 8000:
+                audio_bytes = self.resample(audio_bytes, current_rate, 8000)
+                current_rate = 8000
+            # Convert PCM16 bytes directly to μ-law/A-law (efficient)
+            if codec == "ulaw":
+                return audioop.lin2ulaw(audio_bytes, 2)
+            else:  # alaw
+                return audioop.lin2alaw(audio_bytes, 2)
+        
+        # Resample if needed for other formats
+        if current_rate != target_rate:
+            audio_bytes = self.resample(audio_bytes, current_rate, target_rate)
         
         # Encode to target format
         if codec == "mp3":
@@ -272,22 +315,6 @@ class AudioConverter:
         
         elif codec == "pcm":
             return audio_bytes
-        
-        elif codec == "ulaw":
-            # Resample to 8kHz for μ-law
-            if target_rate != 8000:
-                audio_bytes = self.resample(audio_bytes, target_rate, 8000)
-            return self.numpy_to_ulaw(
-                np.frombuffer(audio_bytes, dtype=np.int16).astype(np.float32) / 32768.0
-            )
-        
-        elif codec == "alaw":
-            # Resample to 8kHz for A-law
-            if target_rate != 8000:
-                audio_bytes = self.resample(audio_bytes, target_rate, 8000)
-            return self.numpy_to_alaw(
-                np.frombuffer(audio_bytes, dtype=np.int16).astype(np.float32) / 32768.0
-            )
         
         elif codec == "opus":
             if HAS_FFMPEG:

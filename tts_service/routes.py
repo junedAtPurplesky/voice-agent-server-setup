@@ -22,6 +22,7 @@ from elevenlabs_models import (
     Model,
     ModelsResponse
 )
+from elevenlabs_formats import validate_output_format, DEFAULT_OUTPUT_FORMAT
 from model_mapper import ModelMapper, AVAILABLE_MODELS
 from auth import auth_manager
 
@@ -104,7 +105,7 @@ async def text_to_speech(
     voice_id: str = Path(..., description="Voice ID"),
     request: TextToSpeechRequest = Body(...),
     xi_api_key: Optional[str] = Header(None, alias="xi-api-key"),
-    output_format: Optional[str] = Query("mp3_44100_128", description="Output format"),
+    output_format: Optional[str] = Query(None, description="Output format (can also be in request body)"),
     optimize_streaming_latency: Optional[int] = Query(0, ge=0, le=4)
 ):
     """Convert text to speech (ElevenLabs-compatible)"""
@@ -120,6 +121,16 @@ async def text_to_speech(
             detail=f"Text too long (max {SERVICE_CONFIG.max_text_length} chars)"
         )
     
+    # Support output_format from request body (ElevenLabs-style) or query parameter
+    format_to_use = request.output_format or output_format or DEFAULT_OUTPUT_FORMAT
+    
+    # Validate format
+    if not validate_output_format(format_to_use):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid output format: {format_to_use}. Use /v1/models endpoint to see supported formats."
+        )
+    
     voice_config, synthesis_config = convert_voice_settings_to_config(
         request.voice_settings or VoiceSettings()
     )
@@ -127,10 +138,10 @@ async def text_to_speech(
     
     try:
         result = engine.synthesize(request.text, voice_config, synthesis_config)
-        audio_converter = AudioConverter(output_format)
+        audio_converter = AudioConverter(format_to_use)
         audio_bytes = audio_converter.convert_audio(result.audio, result.sample_rate)
         
-        codec = output_format.split("_")[0]
+        codec = format_to_use.split("_")[0]
         media_type_map = {
             "mp3": "audio/mpeg",
             "pcm": "audio/pcm",
@@ -159,7 +170,7 @@ async def text_to_speech_stream(
     voice_id: str = Path(..., description="Voice ID"),
     request: TextToSpeechRequest = Body(...),
     xi_api_key: Optional[str] = Header(None, alias="xi-api-key"),
-    output_format: Optional[str] = Query("mp3_44100_128", description="Output format"),
+    output_format: Optional[str] = Query(None, description="Output format (can also be in request body)"),
     optimize_streaming_latency: Optional[int] = Query(0, ge=0, le=4)
 ):
     """Stream text to speech (ElevenLabs-compatible)"""
@@ -175,12 +186,22 @@ async def text_to_speech_stream(
             detail=f"Text too long (max {SERVICE_CONFIG.max_text_length} chars)"
         )
     
+    # Support output_format from request body (ElevenLabs-style) or query parameter
+    format_to_use = request.output_format or output_format or DEFAULT_OUTPUT_FORMAT
+    
+    # Validate format
+    if not validate_output_format(format_to_use):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid output format: {format_to_use}. Use /v1/models endpoint to see supported formats."
+        )
+    
     voice_config, synthesis_config = convert_voice_settings_to_config(
         request.voice_settings or VoiceSettings()
     )
     voice_config.speaker = voice_id
     
-    audio_converter = AudioConverter(output_format)
+    audio_converter = AudioConverter(format_to_use)
     
     async def generate_audio():
         try:
@@ -195,7 +216,7 @@ async def text_to_speech_stream(
             logger.error(f"Streaming error: {e}", exc_info=True)
             raise
     
-    codec = output_format.split("_")[0]
+    codec = format_to_use.split("_")[0]
     media_type_map = {
         "mp3": "audio/mpeg",
         "pcm": "audio/pcm",
@@ -237,13 +258,16 @@ async def websocket_tts_stream_input(
             return
     
     engine = get_synthesis_engine()
-    audio_converter = AudioConverter(output_format)
+    
+    # WebSocket format can be updated via messages, start with query param default
+    current_format = output_format
+    audio_converter = AudioConverter(current_format)
     
     text_buffer = ""
     voice_settings = VoiceSettings()
     
     try:
-        logger.info(f"WebSocket connected: voice={voice_id}, format={output_format}")
+        logger.info(f"WebSocket connected: voice={voice_id}, format={current_format}")
         
         while True:
             msg = await websocket.receive_text()
@@ -259,6 +283,17 @@ async def websocket_tts_stream_input(
             
             if "voice_settings" in data:
                 voice_settings = VoiceSettings(**data["voice_settings"])
+            
+            # Support output_format in WebSocket messages (ElevenLabs-style)
+            if "output_format" in data:
+                new_format = data["output_format"]
+                if validate_output_format(new_format):
+                    current_format = new_format
+                    audio_converter = AudioConverter(current_format)
+                    logger.info(f"WebSocket: Updated output format to {current_format}")
+                else:
+                    await websocket.send_json({"error": f"Invalid output format: {new_format}"})
+                    logger.warning(f"WebSocket: Invalid format requested: {new_format}")
             
             text = data.get("text", "")
             flush = data.get("flush", False)

@@ -21,6 +21,7 @@ class TextToSpeechRequest(BaseModel):
     model_id: Optional[str] = Field(default="eleven_multilingual_v2", description="Model ID")
     voice_settings: Optional[VoiceSettings] = Field(default_factory=VoiceSettings, description="Voice settings")
     language_code: Optional[str] = Field(default=None, description="Language code (optional)")
+    output_format: Optional[str] = Field(default=None, description="Output format (e.g., 'mp3_44100_128', 'pcm_48000')")
 
 
 class Voice(BaseModel):

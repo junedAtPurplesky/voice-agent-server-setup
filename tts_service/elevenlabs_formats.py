@@ -81,6 +81,13 @@ SUPPORTED_OUTPUT_FORMATS = {
         "description": "PCM with 44.1kHz sample rate",
         "tier": "pro"
     },
+    "pcm_48000": {
+        "codec": "pcm",
+        "sample_rate": 48000,
+        "bitrate": None,
+        "description": "PCM with 48kHz sample rate",
+        "tier": "pro"
+    },
     
     # μ-law format (Twilio)
     "ulaw_8000": {
