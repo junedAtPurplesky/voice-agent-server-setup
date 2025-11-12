@@ -14,4 +14,4 @@ models/
 .stt_service.pid
 test_audio*.wav
 sample.wav
-
+.env
