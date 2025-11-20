@@ -1,0 +1,24 @@
+# Test virtual environment
+.test_venv/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Test outputs
+*.log
+*.out
+
+# Test scripts (temporary)
+.test_*.sh
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
