@@ -1,0 +1,1 @@
+#prebuild ghcr.io/remsky/kokoro-fastapi-gpu:latest
